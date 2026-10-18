@@ -1,6 +1,6 @@
 # WhatsApp Inbox
 
-A WhatsApp Web-style inbox built with Next.js for the WhatsApp Cloud API. Send messages, templates, and interactive buttons with a familiar UI.
+A WhatsApp Web-style inbox built with Next.js 16 for the WhatsApp Cloud API. Send messages, templates, and interactive buttons with a familiar UI.
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fgokapso%2Fwhatsapp-cloud-inbox&env=KAPSO_API_KEY&envDescription=Get%20your%20Kapso%20API%20key%20from%20app.kapso.ai&envLink=https%3A%2F%2Fapp.kapso.ai)
 
@@ -15,6 +15,9 @@ A WhatsApp Web-style inbox built with Next.js for the WhatsApp Cloud API. Send m
 - **24-hour window enforcement** - Automatically restricts messaging outside WhatsApp's window
 - **Failed message indicators** - Visual feedback for delivery failures
 - **WhatsApp-style UI** - Familiar interface with read receipts, timestamps, and message bubbles
+- **Single sign-on** - OIDC, Google, Microsoft Entra ID, and GitHub via Auth.js, with domain/email allowlists
+- **Mobile first** - Touch-sized controls, bottom-sheet dialogs, safe-area insets, and installable as a PWA
+- **Container image** - Multi-arch image published to GitHub Container Registry
 
 ## Setup
 
@@ -48,6 +51,8 @@ PHONE_NUMBER_ID=your_phone_number_id
 WABA_ID=your_business_account_id
 ```
 
+Requires Node.js 20.9 or newer.
+
 ### 4. Run
 
 ```bash
@@ -57,6 +62,34 @@ npm run dev
 Open [http://localhost:4000](http://localhost:4000)
 
 Open [http://localhost:4000/settings](http://localhost:4000/settings) to choose which WhatsApp numbers the inbox tracks. The app discovers `PHONE_NUMBER_ID` and `WABA_ID` values from Kapso using `KAPSO_API_KEY`, then stores the selected numbers in an HTTP-only cookie.
+
+## Single sign-on
+
+Every page and API route is protected by SSO through [Auth.js](https://authjs.dev). Configure one or more identity providers in `.env` (see `.env.example`); each provider appears as a button on `/login`.
+
+| Provider | Variables | Callback URL |
+| --- | --- | --- |
+| Generic OIDC (Okta, Auth0, Keycloak, Authentik, …) | `AUTH_OIDC_ISSUER`, `AUTH_OIDC_ID`, `AUTH_OIDC_SECRET`, `AUTH_OIDC_NAME` | `/api/auth/callback/oidc` |
+| Google | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_GOOGLE_HOSTED_DOMAIN` | `/api/auth/callback/google` |
+| Microsoft Entra ID | `AUTH_MICROSOFT_ENTRA_ID_ID`, `AUTH_MICROSOFT_ENTRA_ID_SECRET`, `AUTH_MICROSOFT_ENTRA_ID_ISSUER` | `/api/auth/callback/microsoft-entra-id` |
+| GitHub | `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET` | `/api/auth/callback/github` |
+
+- `AUTH_SECRET` is required in production (`openssl rand -base64 32`).
+- `AUTH_URL` must be the public URL of the app when it runs behind a proxy or in a container; otherwise the OAuth callback points at the container's internal address.
+- `AUTH_ALLOWED_DOMAINS` / `AUTH_ALLOWED_EMAILS` restrict who can sign in. Accounts the provider marks as unverified are always rejected.
+- With no provider configured, the app stays open under `npm run dev` but is locked in production. `AUTH_DISABLED=true` turns SSO off explicitly.
+- `/api/health` stays public for container health checks.
+
+## Container image
+
+Each push to `main` and each `v*` tag builds a `linux/amd64` + `linux/arm64` image and publishes it to GitHub Container Registry with provenance and an SBOM (`.github/workflows/container.yml`). Pull requests build the image without pushing it.
+
+```bash
+docker pull ghcr.io/angwdev/whatsapp-cloud-inbox:latest
+docker run --env-file .env -p 4000:3000 ghcr.io/angwdev/whatsapp-cloud-inbox:latest
+```
+
+Or build and run it locally with `docker compose up --build`. Tags: `latest` (default branch), `main`, `sha-<commit>`, and `1.2.3` / `1.2` for release tags. The first publish creates a private package; make it public under the repository's **Packages** settings if you want anonymous pulls.
 
 ## Key Features
 

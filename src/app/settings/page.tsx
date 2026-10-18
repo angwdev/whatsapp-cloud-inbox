@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { AccountSection } from '@/components/account-section';
 import { ThemeToggle } from '@/components/theme-toggle';
 import type { InboxSettingsResponse, KapsoPhoneNumber } from '@/types/settings';
 
@@ -195,7 +196,7 @@ export default function SettingsPage() {
               asChild
               variant="ghost"
               size="icon"
-              className="size-10 flex-shrink-0 rounded-md text-muted-foreground hover:bg-[var(--chat-hover)]"
+              className="size-11 flex-shrink-0 rounded-md text-muted-foreground hover:bg-[var(--chat-hover)] sm:size-10"
               aria-label="Back to inbox"
               title="Back to inbox"
             >
@@ -204,18 +205,22 @@ export default function SettingsPage() {
               </Link>
             </Button>
             <div className="flex min-w-0 items-center gap-2">
-              <Settings className="size-4 flex-shrink-0 text-[var(--chat-presence)]" />
-              <h1 className="truncate text-base font-semibold">Inbox settings</h1>
+              <Settings className="hidden size-4 flex-shrink-0 text-[var(--chat-presence)] sm:block" />
+              <h1 className="truncate text-base font-semibold">
+                <span className="sm:hidden">Settings</span>
+                <span className="hidden sm:inline">Inbox settings</span>
+              </h1>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <ThemeToggle className="size-10 rounded-md text-muted-foreground" />
+          <div className="flex flex-shrink-0 items-center gap-1.5 sm:gap-2">
+            <ThemeToggle className="size-11 rounded-md text-muted-foreground sm:size-10" />
             <Button
               type="button"
               variant="outline"
               onClick={handleRefresh}
               disabled={refreshing || saving}
-              className="h-10 rounded-md"
+              className="h-11 rounded-md sm:h-10"
+              aria-label="Refresh numbers"
             >
               {refreshing ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -228,7 +233,7 @@ export default function SettingsPage() {
               type="button"
               onClick={handleSave}
               disabled={!dirty || saving || refreshing}
-              className="h-10 rounded-md bg-primary hover:bg-[var(--primary-hover)]"
+              className="h-11 rounded-md bg-primary hover:bg-[var(--primary-hover)] sm:h-10"
             >
               {saving ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -241,7 +246,9 @@ export default function SettingsPage() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl px-4 py-5">
+      <main className="mx-auto w-full max-w-5xl px-4 py-5 safe-area-bottom">
+        <AccountSection />
+
         <section className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-sm font-semibold">Tracked numbers</h2>
@@ -314,12 +321,12 @@ export default function SettingsPage() {
                           selected && 'border-primary/50 bg-primary/5'
                         )}
                       >
-                        <label className="flex min-w-0 cursor-pointer items-start gap-3">
+                        <label className="flex min-h-11 min-w-0 cursor-pointer items-start gap-3">
                           <input
                             type="checkbox"
                             checked={selected}
                             onChange={() => handleTogglePhoneNumber(phoneNumberId)}
-                            className="mt-1 size-4 rounded border-[var(--chat-border-strong)] accent-primary"
+                            className="mt-0.5 size-5 flex-shrink-0 rounded sm:mt-1 sm:size-4 border-[var(--chat-border-strong)] accent-primary"
                             aria-label={`Track ${displayNameForPhoneNumber(phoneNumber)}`}
                           />
                           <span className="min-w-0 flex-1">
@@ -354,7 +361,7 @@ export default function SettingsPage() {
                         <div className="flex items-center justify-between gap-3 sm:justify-end">
                           <label
                             className={cn(
-                              'inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-[var(--chat-border-strong)] px-3 text-xs font-medium text-muted-foreground',
+                              'inline-flex h-11 cursor-pointer items-center gap-2 rounded-md border border-[var(--chat-border-strong)] px-3 text-xs font-medium text-muted-foreground sm:h-9',
                               selected && 'text-foreground',
                               isDefault && 'border-primary/50 bg-primary/10 text-foreground',
                               !selected && 'cursor-not-allowed opacity-50'
@@ -371,7 +378,7 @@ export default function SettingsPage() {
                                 setSaveError(null);
                                 setDefaultPhoneNumberId(phoneNumberId);
                               }}
-                              className="size-3.5 accent-primary"
+                              className="size-4 accent-primary sm:size-3.5"
                               aria-label={`Use ${displayNameForPhoneNumber(phoneNumber)} as default sender`}
                             />
                             Default

@@ -867,7 +867,7 @@ export function MessageView({
               </Button>
             )}
             <div className="flex-1 min-w-0">
-              <h2 className="truncate text-sm font-medium text-foreground sm:text-base">
+              <h2 className="truncate text-base font-medium text-foreground">
                 {contactName || phoneNumber || "Conversation"}
               </h2>
               {displayPhoneNumber && (
@@ -885,7 +885,7 @@ export function MessageView({
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-shrink-0 items-center gap-0.5 md:gap-2">
             <ThemeToggle className="size-11 md:hidden" />
             <Button
               onClick={handleRefresh}
@@ -906,7 +906,7 @@ export function MessageView({
 
       <ScrollArea
         ref={messagesContainerRef}
-        className="h-0 flex-1 overscroll-contain p-3 sm:p-4 lg:p-6"
+        className="h-0 flex-1 overscroll-contain px-2 py-3 sm:p-4 lg:p-6"
       >
         <div className="mx-auto w-full max-w-[900px]">
           {messages.length === 0 ? (
@@ -968,7 +968,7 @@ export function MessageView({
                         onClick={() => handleReplyToMessage(message)}
                         variant="ghost"
                         size="icon"
-                        className="mt-1 size-7 flex-shrink-0 text-muted-foreground opacity-100 hover:bg-[var(--chat-hover)] sm:opacity-0 sm:group-hover:opacity-100"
+                        className="mt-1 size-9 flex-shrink-0 text-muted-foreground opacity-100 hover:bg-[var(--chat-hover)] focus-visible:opacity-100 pointer-fine:size-7 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
                         aria-label="Reply to message"
                         title="Reply"
                       >
@@ -1118,7 +1118,7 @@ export function MessageView({
                         onClick={() => handleReplyToMessage(message)}
                         variant="ghost"
                         size="icon"
-                        className="mt-1 size-7 flex-shrink-0 text-muted-foreground opacity-100 hover:bg-[var(--chat-hover)] sm:opacity-0 sm:group-hover:opacity-100"
+                        className="mt-1 size-9 flex-shrink-0 text-muted-foreground opacity-100 hover:bg-[var(--chat-hover)] focus-visible:opacity-100 pointer-fine:size-7 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
                         aria-label="Reply to message"
                         title="Reply"
                       >
@@ -1154,7 +1154,7 @@ export function MessageView({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="size-8 flex-shrink-0 text-muted-foreground"
+                    className="size-11 flex-shrink-0 text-muted-foreground md:size-8"
                     aria-label="Cancel reply"
                     title="Cancel reply"
                   >
@@ -1202,7 +1202,7 @@ export function MessageView({
 
             <form
               onSubmit={handleSendMessage}
-              className="mx-auto flex w-full max-w-[900px] items-end gap-1.5 px-2.5 py-2 sm:gap-2 sm:p-3"
+              className="mx-auto flex w-full max-w-[900px] items-end gap-1 px-2 py-2 sm:gap-2 sm:p-3"
             >
               <input
                 ref={fileInputRef}
@@ -1242,6 +1242,8 @@ export function MessageView({
                 onChange={(e) => setMessageInput(e.target.value)}
                 placeholder="Type a message"
                 disabled={sending}
+                autoComplete="off"
+                enterKeyHint="send"
                 aria-label="Message"
                 className="h-11 min-w-0 flex-1 rounded-lg border-[var(--chat-border-strong)] bg-[var(--chat-input)] text-base focus-visible:ring-primary md:h-10 md:text-sm"
               />
@@ -1257,7 +1259,7 @@ export function MessageView({
             </form>
           </>
         ) : (
-          <div className="mx-auto w-full max-w-[900px] p-3">
+          <div className="mx-auto w-full max-w-[900px] p-2 sm:p-3">
             <div className="bg-[var(--chat-warning-background)] border border-[var(--chat-warning-border)] rounded-lg p-4">
               <div className="flex items-start gap-3">
                 <AlertCircle className="h-5 w-5 text-[var(--chat-warning-foreground)] flex-shrink-0 mt-0.5" />
@@ -1267,7 +1269,7 @@ export function MessageView({
                   </p>
                   <Button
                     onClick={() => setShowTemplateDialog(true)}
-                    className="h-11 bg-primary hover:bg-[var(--primary-hover)] md:h-9"
+                    className="h-11 w-full bg-primary hover:bg-[var(--primary-hover)] sm:w-auto md:h-9"
                     size="sm"
                   >
                     <MessageSquare className="h-4 w-4 mr-2" />

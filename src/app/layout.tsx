@@ -40,11 +40,24 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // Shrink the layout viewport when the on-screen keyboard opens so the composer stays visible.
+  interactiveWidget: "resizes-content",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f9fafb" },
+    { media: "(prefers-color-scheme: dark)", color: "#0c0a09" },
+  ],
 };
 
 export const metadata: Metadata = {
   title: "WhatsApp inbox",
   description: "A simple WhatsApp inbox built with Next.js",
+  applicationName: "WhatsApp inbox",
+  appleWebApp: {
+    capable: true,
+    title: "Inbox",
+    statusBarStyle: "black-translucent",
+  },
+  formatDetection: { telephone: false },
 };
 
 export default function RootLayout({

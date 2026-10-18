@@ -168,13 +168,13 @@ export function TemplateParametersDialog({
         <Separator />
 
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
-          <Button variant="outline" onClick={onBack}>
+          <Button variant="outline" className="h-11 sm:h-9" onClick={onBack}>
             Back
           </Button>
           <Button
             onClick={handleSend}
             disabled={!allParametersFilled || sending}
-            className="bg-primary hover:bg-[var(--primary-hover)]"
+            className="h-11 bg-primary hover:bg-[var(--primary-hover)] sm:h-9"
           >
             {sending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
