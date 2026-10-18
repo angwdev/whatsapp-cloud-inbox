@@ -1,0 +1,16 @@
+.git
+.github
+.next
+node_modules
+npm-debug.log*
+.env
+.env.*
+!.env.example
+.vercel
+.claude
+Dockerfile
+docker-compose.yml
+*.tsbuildinfo
+next-env.d.ts
+assets
+README.md

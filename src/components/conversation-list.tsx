@@ -332,12 +332,12 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
           <div className="mb-3 flex items-center justify-between pt-1">
             <Skeleton className="h-6 w-20" />
             <div className="flex items-center gap-2">
-              <Skeleton className="size-8" />
-              <Skeleton className="size-8" />
-              <Skeleton className="size-8" />
+              <Skeleton className="size-9 md:size-8" />
+              <Skeleton className="size-9 md:size-8" />
+              <Skeleton className="size-9 md:size-8" />
             </div>
           </div>
-          <Skeleton className="h-9 w-full rounded-lg" />
+          <Skeleton className="h-11 w-full rounded-lg md:h-9" />
           <div className="mt-2 flex gap-2">
             <Skeleton className="h-8 w-20 rounded-md" />
             <Skeleton className="h-8 w-24 rounded-md" />
@@ -364,7 +364,7 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
       isHidden && "hidden md:flex"
     )}>
       <div ref={controlsRef} className="border-b border-[var(--chat-border-strong)] bg-[var(--chat-toolbar)] px-3 py-3 safe-area-top">
-        <div className="mb-3 flex items-center justify-between pt-1">
+        <div className="mb-2 flex items-center justify-between md:mb-3 md:pt-1">
           <div className="flex items-center gap-2">
             <h1 className="text-lg font-semibold text-foreground">Inbox</h1>
             {isFetching && (
@@ -376,7 +376,7 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
               />
             )}
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-0.5 md:gap-1.5">
             <Button
               type="button"
               onClick={handleNotificationsClick}
@@ -384,7 +384,7 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
               variant="ghost"
               size="icon"
               className={cn(
-                "size-8 rounded-md text-muted-foreground hover:bg-[var(--chat-icon-hover)] hover:text-foreground",
+                "size-11 rounded-md text-muted-foreground hover:bg-[var(--chat-icon-hover)] hover:text-foreground md:size-8",
                 notificationsActive && "text-primary hover:text-primary",
               )}
               aria-label={notificationsButtonTitle}
@@ -403,7 +403,7 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
               disabled={refreshing}
               variant="ghost"
               size="icon"
-              className="size-8 rounded-md text-muted-foreground hover:bg-[var(--chat-icon-hover)] hover:text-foreground"
+              className="size-11 rounded-md text-muted-foreground hover:bg-[var(--chat-icon-hover)] hover:text-foreground md:size-8"
               aria-label="Refresh conversations"
               title="Refresh conversations"
             >
@@ -413,7 +413,7 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
               asChild
               variant="ghost"
               size="icon"
-              className="size-8 rounded-md text-muted-foreground hover:bg-[var(--chat-icon-hover)] hover:text-foreground"
+              className="size-11 rounded-md text-muted-foreground hover:bg-[var(--chat-icon-hover)] hover:text-foreground md:size-8"
               aria-label="Inbox settings"
               title="Inbox settings"
             >
@@ -421,19 +421,21 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
                 <Settings className="size-4" />
               </Link>
             </Button>
-            <ThemeToggle className="size-8 rounded-md text-muted-foreground md:size-8" />
+            <ThemeToggle className="size-11 rounded-md text-muted-foreground md:size-8" />
           </div>
         </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             ref={searchInputRef}
-            type="text"
+            type="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search phone numbers..."
+            inputMode="search"
+            enterKeyHint="search"
             aria-label="Search phone numbers"
-            className="h-9 rounded-md border-[var(--chat-border-strong)] bg-[var(--chat-input)] pl-9 text-sm shadow-none focus-visible:ring-1 focus-visible:ring-primary"
+            className="h-11 rounded-md border-[var(--chat-border-strong)] bg-[var(--chat-input)] pl-9 text-base shadow-none md:h-9 md:text-sm focus-visible:ring-1 focus-visible:ring-primary"
           />
         </div>
         <div className="mt-2 flex items-center gap-2">
@@ -446,7 +448,7 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
                 setIsStatusMenuOpen(open => !open);
                 setIsFilterMenuOpen(false);
               }}
-              className="h-8 gap-1 rounded-md bg-[var(--chat-hover)] px-2.5 text-xs font-medium text-foreground hover:bg-[var(--chat-icon-hover)]"
+              className="h-10 gap-1 rounded-md bg-[var(--chat-hover)] px-3 text-sm md:h-8 md:px-2.5 md:text-xs font-medium text-foreground hover:bg-[var(--chat-icon-hover)]"
               aria-haspopup="menu"
               aria-expanded={isStatusMenuOpen}
             >
@@ -458,7 +460,7 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
               <div
                 role="menu"
                 aria-label="Conversation status"
-                className="absolute left-0 top-[calc(100%+0.25rem)] z-50 w-40 rounded-md border border-[var(--chat-border-strong)] bg-popover p-1 text-sm text-popover-foreground shadow-lg"
+                className="absolute left-0 top-[calc(100%+0.25rem)] z-50 w-48 rounded-md border border-[var(--chat-border-strong)] bg-popover p-1 text-sm text-popover-foreground shadow-lg"
               >
                 {STATUS_FILTERS.map((filter) => (
                   <button
@@ -470,7 +472,7 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
                       setStatusFilter(filter.value);
                       setIsStatusMenuOpen(false);
                     }}
-                    className="flex h-8 w-full items-center gap-2 rounded px-2 text-left text-xs font-medium text-foreground hover:bg-[var(--chat-hover)]"
+                    className="flex h-11 w-full items-center gap-2 rounded px-2 text-left text-sm md:h-8 md:text-xs font-medium text-foreground hover:bg-[var(--chat-hover)]"
                   >
                     <span className="flex-1">{filter.label}</span>
                     <span className="text-[10px] tabular-nums text-muted-foreground">{threadCounts[filter.value]}</span>
@@ -490,7 +492,7 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
                 setIsFilterMenuOpen(open => !open);
                 setIsStatusMenuOpen(false);
               }}
-              className="h-8 gap-1 rounded-md px-2.5 text-xs font-medium text-muted-foreground hover:bg-[var(--chat-hover)] hover:text-foreground"
+              className="h-10 gap-1 rounded-md px-3 text-sm font-medium md:h-8 md:px-2.5 md:text-xs text-muted-foreground hover:bg-[var(--chat-hover)] hover:text-foreground"
               aria-haspopup="menu"
               aria-expanded={isFilterMenuOpen}
             >
@@ -502,7 +504,7 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
               <div
                 role="menu"
                 aria-label="Additional filters"
-                className="absolute left-0 top-[calc(100%+0.25rem)] z-50 w-44 rounded-md border border-[var(--chat-border-strong)] bg-popover p-1 text-sm text-popover-foreground shadow-lg"
+                className="absolute left-0 top-[calc(100%+0.25rem)] z-50 w-52 rounded-md border border-[var(--chat-border-strong)] bg-popover p-1 text-sm text-popover-foreground shadow-lg"
               >
                 {FILTER_MENU_ITEMS.map((item) => (
                   <button
@@ -517,7 +519,7 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
                       setIsFilterMenuOpen(false);
                     }}
                     className={cn(
-                      'flex h-8 w-full items-center rounded px-2 text-left text-xs font-medium text-foreground hover:bg-[var(--chat-hover)]',
+                      'flex h-11 w-full items-center rounded px-2 text-left text-sm md:h-8 md:text-xs font-medium text-foreground hover:bg-[var(--chat-hover)]',
                       'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent'
                     )}
                   >
@@ -540,29 +542,29 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
             {searchQuery ? 'No phone numbers found' : 'No conversations found'}
           </div>
         ) : (
-          <div className="w-full overflow-hidden">
+          <div className="w-full overflow-hidden safe-area-bottom">
             {filteredThreads.map((thread) => (
               <button
                 key={thread.key}
                 onClick={() => onSelectThread(thread)}
                 className={cn(
-                  'relative min-h-[68px] w-full touch-manipulation overflow-hidden border-b border-[var(--chat-border)] px-3 py-2 text-left transition-colors hover:bg-[var(--chat-hover)]',
+                  'relative min-h-[72px] w-full touch-manipulation overflow-hidden border-b border-[var(--chat-border)] px-3 py-2.5 text-left transition-colors hover:bg-[var(--chat-hover)] active:bg-[var(--chat-hover)] md:min-h-[68px] md:py-2',
                   selectedThreadKey === thread.key && 'bg-[var(--chat-hover)]'
                 )}
               >
                 <div className="flex items-start gap-3 overflow-hidden">
-                  <Avatar className="mt-0.5 size-9 flex-shrink-0">
+                  <Avatar className="mt-0.5 size-11 flex-shrink-0 md:size-9">
                     <AvatarFallback className="bg-cyan-100 text-xs font-semibold text-cyan-950">
                       {getAvatarInitials(thread.contactName, thread.phoneNumber)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex min-w-0 flex-1 items-start justify-between gap-2 overflow-hidden">
                     <div className="min-w-0 flex-1 overflow-hidden">
-                      <p className="truncate text-sm font-semibold leading-5 text-foreground">
+                      <p className="truncate text-[15px] font-semibold leading-5 text-foreground md:text-sm">
                         {thread.contactName || thread.phoneNumber || 'Unknown phone number'}
                       </p>
                       {thread.lastMessage && (
-                        <p className="truncate text-xs leading-4 text-muted-foreground">
+                        <p className="truncate text-sm leading-5 text-muted-foreground md:text-xs md:leading-4">
                           {thread.lastMessage.direction === 'outbound' && (
                             <span className="text-[var(--chat-check)]">✓ </span>
                           )}

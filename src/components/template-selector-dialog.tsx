@@ -194,7 +194,7 @@ export function TemplateSelectorDialog({ open, onOpenChange, phoneNumber, phoneN
                       onClick={() => handleSelectTemplate(template)}
                       disabled={sending !== null}
                       size="sm"
-                      className="h-10 w-full bg-primary hover:bg-[var(--primary-hover)] sm:w-auto"
+                      className="h-11 w-full bg-primary sm:h-10 hover:bg-[var(--primary-hover)] sm:w-auto"
                     >
                       {sending === template.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -215,7 +215,7 @@ export function TemplateSelectorDialog({ open, onOpenChange, phoneNumber, phoneN
         <Separator />
 
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" className="h-11 w-full sm:h-9 sm:w-auto" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
         </div>

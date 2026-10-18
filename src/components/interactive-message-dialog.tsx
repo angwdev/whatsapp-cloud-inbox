@@ -187,7 +187,7 @@ export function InteractiveMessageDialog({
                 size="sm"
                 onClick={handleAddButton}
                 disabled={buttons.length >= 3}
-                className="h-10 text-primary hover:bg-[var(--chat-hover)] hover:text-[var(--primary-hover)]"
+                className="h-11 text-primary hover:bg-[var(--chat-hover)] sm:h-10 hover:text-[var(--primary-hover)]"
               >
                 <Plus className="h-4 w-4 mr-1" />
                 Add button
@@ -234,13 +234,13 @@ export function InteractiveMessageDialog({
         <Separator />
 
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" className="h-11 sm:h-9" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
             onClick={handleSend}
             disabled={!isValid() || sending}
-            className="bg-primary hover:bg-[var(--primary-hover)]"
+            className="h-11 bg-primary hover:bg-[var(--primary-hover)] sm:h-9"
           >
             {sending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
