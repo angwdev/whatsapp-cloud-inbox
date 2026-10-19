@@ -790,8 +790,8 @@ export function MessageView({
           !isVisible && "hidden md:flex",
         )}
       >
-        <div className="border-b border-[var(--chat-border-strong)] bg-[var(--chat-toolbar)] p-2.5 safe-area-top sm:p-3">
-          <div className="flex items-center justify-between pt-1">
+        <div className="border-b border-[var(--chat-border-strong)] bg-[var(--chat-toolbar)] px-2 pb-2 pt-safe-2 sm:px-3 sm:pb-3 sm:pt-safe-3">
+          <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 flex-1">
               {onBack && (
                 <Button
@@ -815,7 +815,7 @@ export function MessageView({
             </div>
           </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4 lg:p-6">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 sm:p-4 lg:p-6">
           <div className="mx-auto w-full max-w-[900px] space-y-3">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div
@@ -852,8 +852,8 @@ export function MessageView({
         !isVisible && "hidden md:flex",
       )}
     >
-      <div className="border-b border-[var(--chat-border-strong)] bg-[var(--chat-toolbar)] p-2.5 safe-area-top sm:p-3">
-        <div className="flex items-center justify-between pt-1">
+      <div className="border-b border-[var(--chat-border-strong)] bg-[var(--chat-toolbar)] px-2 pb-2 pt-safe-2 sm:px-3 sm:pb-3 sm:pt-safe-3">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             {onBack && (
               <Button
@@ -906,7 +906,7 @@ export function MessageView({
 
       <ScrollArea
         ref={messagesContainerRef}
-        className="h-0 flex-1 overscroll-contain px-2 py-3 sm:p-4 lg:p-6"
+        className="h-0 flex-1 overscroll-contain px-4 py-3 sm:p-4 lg:p-6"
       >
         <div className="mx-auto w-full max-w-[900px]">
           {messages.length === 0 ? (
@@ -1134,11 +1134,11 @@ export function MessageView({
         </div>
       </ScrollArea>
 
-      <div className="border-t border-[var(--chat-border-strong)] bg-[var(--chat-toolbar)] safe-area-bottom">
+      <div className="border-t border-[var(--chat-border-strong)] bg-[var(--chat-toolbar)] pb-safe-0">
         {canSendRegularMessage ? (
           <>
             {replyingToMessage && (
-              <div className="border-b border-[var(--chat-border-strong)] bg-[var(--chat-surface)] px-3 py-2">
+              <div className="border-b border-[var(--chat-border-strong)] bg-[var(--chat-surface)] px-4 py-2">
                 <div className="mx-auto flex w-full max-w-[900px] items-center gap-2">
                   <Reply className="h-4 w-4 flex-shrink-0 text-primary" />
                   <div className="min-w-0 flex-1">
@@ -1165,7 +1165,7 @@ export function MessageView({
             )}
 
             {selectedFile && (
-              <div className="border-b border-[var(--chat-border-strong)] bg-[var(--chat-surface)] p-3">
+              <div className="border-b border-[var(--chat-border-strong)] bg-[var(--chat-surface)] px-4 py-3">
                 <div className="mx-auto flex w-full max-w-[900px] items-start gap-3">
                   {filePreview ? (
                     <img
@@ -1202,7 +1202,7 @@ export function MessageView({
 
             <form
               onSubmit={handleSendMessage}
-              className="mx-auto flex w-full max-w-[900px] items-end gap-1 px-2 py-2 sm:gap-2 sm:p-3"
+              className="mx-auto flex w-full max-w-[900px] items-end gap-2 px-3 py-2.5 sm:p-3"
             >
               <input
                 ref={fileInputRef}
@@ -1259,12 +1259,12 @@ export function MessageView({
             </form>
           </>
         ) : (
-          <div className="mx-auto w-full max-w-[900px] p-2 sm:p-3">
-            <div className="bg-[var(--chat-warning-background)] border border-[var(--chat-warning-border)] rounded-lg p-4">
+          <div className="mx-auto w-full max-w-[900px] px-4 py-3">
+            <div className="rounded-lg border border-[var(--chat-warning-border)] bg-[var(--chat-warning-background)] p-3 sm:p-4">
               <div className="flex items-start gap-3">
                 <AlertCircle className="h-5 w-5 text-[var(--chat-warning-foreground)] flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-foreground mb-3">
+                  <p className="mb-3 text-sm leading-5 text-foreground">
                     {getDisabledInputMessage(messages)}
                   </p>
                   <Button
@@ -1272,7 +1272,7 @@ export function MessageView({
                     className="h-11 w-full bg-primary hover:bg-[var(--primary-hover)] sm:w-auto md:h-9"
                     size="sm"
                   >
-                    <MessageSquare className="h-4 w-4 mr-2" />
+                    <MessageSquare className="h-4 w-4" />
                     Send template
                   </Button>
                 </div>

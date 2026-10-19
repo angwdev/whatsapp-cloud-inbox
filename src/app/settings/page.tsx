@@ -189,7 +189,7 @@ export default function SettingsPage() {
 
   return (
     <div className="h-dvh min-h-dvh overflow-y-auto bg-background text-foreground">
-      <header className="sticky top-0 z-20 border-b border-[var(--chat-border-strong)] bg-[var(--chat-toolbar)] px-4 py-3 safe-area-top">
+      <header className="sticky top-0 z-20 border-b border-[var(--chat-border-strong)] bg-[var(--chat-toolbar)] px-4 pb-3 pt-safe-3">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             <Button
@@ -246,7 +246,7 @@ export default function SettingsPage() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl px-4 py-5 safe-area-bottom">
+      <main className="mx-auto w-full max-w-5xl px-4 pt-5 pb-safe-8">
         <AccountSection />
 
         <section className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -257,7 +257,7 @@ export default function SettingsPage() {
               {data?.phoneNumbers.length ? ` of ${data.phoneNumbers.length}` : ''}
             </p>
           </div>
-          <div className="flex min-h-6 items-center gap-2 text-sm">
+          <div className="flex items-center gap-3 text-sm empty:hidden sm:min-h-6 sm:empty:flex">
             {isFetching && !refreshing && (
               <span className="inline-flex items-center gap-1.5 text-muted-foreground">
                 <Loader2 className="size-3.5 animate-spin" />

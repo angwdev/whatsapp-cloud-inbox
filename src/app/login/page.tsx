@@ -37,7 +37,7 @@ export default async function LoginPage({
     : null;
 
   return (
-    <main className="flex h-dvh min-h-dvh flex-col overflow-y-auto bg-background px-4 text-foreground safe-area-top safe-area-bottom">
+    <main className="flex h-dvh min-h-dvh flex-col overflow-y-auto bg-background px-4 pb-safe-0 pt-safe-0 text-foreground">
       <div className="m-auto w-full max-w-sm py-8">
         <div className="mb-8 flex flex-col items-center text-center">
           <span className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-primary/15 text-primary">
