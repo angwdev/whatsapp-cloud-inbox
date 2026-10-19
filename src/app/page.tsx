@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ConversationList } from '@/components/conversation-list';
 import { MessageView } from '@/components/message-view';
@@ -10,6 +10,7 @@ import {
   fetchConversations,
   groupConversationsByPhoneNumber,
 } from '@/lib/inbox-data';
+import { NOTIFICATION_CLICK_MESSAGE } from '@/lib/notifications';
 
 export default function Home() {
   const [selectedThreadKey, setSelectedThreadKey] = useState<string>();
@@ -24,6 +25,28 @@ export default function Home() {
     () => groupConversationsByPhoneNumber(conversations),
     [conversations],
   );
+
+  useEffect(() => {
+    // A notification tapped while the app was closed opens /?thread=<key>.
+    const url = new URL(window.location.href);
+    const threadFromUrl = url.searchParams.get('thread');
+    if (threadFromUrl) {
+      setSelectedThreadKey(threadFromUrl);
+      url.searchParams.delete('thread');
+      window.history.replaceState(null, '', `${url.pathname}${url.search}`);
+    }
+
+    if (!('serviceWorker' in navigator)) return;
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === NOTIFICATION_CLICK_MESSAGE && typeof event.data.threadKey === 'string') {
+        setSelectedThreadKey(event.data.threadKey);
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('message', handleMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
+  }, []);
 
   const selectedThread = selectedThreadKey
     ? threads.find(thread => thread.key === selectedThreadKey)

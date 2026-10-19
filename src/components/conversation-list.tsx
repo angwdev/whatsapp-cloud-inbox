@@ -22,6 +22,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { getNotificationRegistration, showInboxNotification } from '@/lib/notifications';
 
 function formatConversationDate(timestamp?: string): string {
   if (!timestamp) return '';
@@ -222,6 +223,7 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
     const permission = await Notification.requestPermission();
     setNotificationPermission(permission);
     persistNotificationsEnabled(permission === 'granted');
+    if (permission === 'granted') void getNotificationRegistration();
   };
 
   useEffect(() => {
@@ -244,6 +246,17 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
   }, []);
 
   useEffect(() => {
+    // Register ahead of the first notification so it is not delayed by install.
+    if (notificationsEnabled && notificationPermission === 'granted') {
+      void getNotificationRegistration();
+    }
+  }, [notificationPermission, notificationsEnabled]);
+
+  useEffect(() => {
+    // Take the baseline from the first real response, not the empty placeholder,
+    // so loading the inbox doesn't notify for every existing thread.
+    if (isPending) return;
+
     const currentSnapshots = new Map(
       threads.map((thread) => [thread.key, getThreadNotificationSnapshot(thread)]),
     );
@@ -267,23 +280,19 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
           return;
         }
 
-        const title = thread.contactName || thread.phoneNumber || 'New WhatsApp message';
-        const body = thread.lastMessage?.content || 'New message received';
-        const notification = new Notification(title, {
-          body,
-          tag: `whatsapp-inbox:${thread.key}`,
+        showInboxNotification({
+          title: thread.contactName || thread.phoneNumber || 'New WhatsApp message',
+          body: thread.lastMessage?.content || 'New message received',
+          threadKey: thread.key,
+          onClick: () => onSelectThread(thread),
+        }).catch((error) => {
+          console.warn('Could not show notification:', error);
         });
-
-        notification.onclick = () => {
-          window.focus();
-          onSelectThread(thread);
-          notification.close();
-        };
       });
     }
 
     previousThreadSnapshotsRef.current = currentSnapshots;
-  }, [notificationPermission, notificationsEnabled, onSelectThread, selectedThreadKey, threads]);
+  }, [isPending, notificationPermission, notificationsEnabled, onSelectThread, selectedThreadKey, threads]);
 
   useEffect(() => {
     if (!isStatusMenuOpen && !isFilterMenuOpen) return;
@@ -328,8 +337,8 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
         "flex min-h-0 w-full min-w-0 flex-col border-[var(--chat-border-strong)] bg-[var(--chat-surface)] md:w-[22rem] md:flex-none md:border-r lg:w-[24rem] xl:w-[26rem]",
         isHidden && "hidden md:flex"
       )}>
-        <div className="border-b border-[var(--chat-border-strong)] bg-[var(--chat-toolbar)] px-3 py-3 safe-area-top">
-          <div className="mb-3 flex items-center justify-between pt-1">
+        <div className="border-b border-[var(--chat-border-strong)] bg-[var(--chat-toolbar)] px-4 pb-3 pt-safe-3">
+          <div className="mb-3 flex items-center justify-between gap-2">
             <Skeleton className="h-6 w-20" />
             <div className="flex items-center gap-2">
               <Skeleton className="size-9 md:size-8" />
@@ -338,12 +347,12 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
             </div>
           </div>
           <Skeleton className="h-11 w-full rounded-lg md:h-9" />
-          <div className="mt-2 flex gap-2">
+          <div className="mt-3 flex gap-2">
             <Skeleton className="h-8 w-20 rounded-md" />
             <Skeleton className="h-8 w-24 rounded-md" />
           </div>
         </div>
-        <div className="flex-1 space-y-2 overflow-hidden p-3">
+        <div className="flex-1 space-y-2 overflow-hidden px-4 py-3">
           {[1, 2, 3, 4, 5, 6, 7].map((i) => (
             <div key={i} className="flex gap-3 py-2">
               <Skeleton className="size-9 flex-shrink-0 rounded-full" />
@@ -363,8 +372,8 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
       "flex min-h-0 w-full min-w-0 flex-col border-[var(--chat-border-strong)] bg-[var(--chat-surface)] md:w-[22rem] md:flex-none md:border-r lg:w-[24rem] xl:w-[26rem]",
       isHidden && "hidden md:flex"
     )}>
-      <div ref={controlsRef} className="border-b border-[var(--chat-border-strong)] bg-[var(--chat-toolbar)] px-3 py-3 safe-area-top">
-        <div className="mb-2 flex items-center justify-between md:mb-3 md:pt-1">
+      <div ref={controlsRef} className="border-b border-[var(--chat-border-strong)] bg-[var(--chat-toolbar)] px-4 pb-3 pt-safe-3">
+        <div className="mb-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <h1 className="text-lg font-semibold text-foreground">Inbox</h1>
             {isFetching && (
@@ -438,7 +447,7 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
             className="h-11 rounded-md border-[var(--chat-border-strong)] bg-[var(--chat-input)] pl-9 text-base shadow-none md:h-9 md:text-sm focus-visible:ring-1 focus-visible:ring-primary"
           />
         </div>
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-3 flex items-center gap-2">
           <div className="relative">
             <Button
               type="button"
@@ -534,21 +543,21 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
 
       <ScrollArea className="h-0 flex-1 overflow-hidden overscroll-contain">
         {error ? (
-          <div className="p-4 text-center text-sm text-destructive">
-            Failed to load conversations
+          <div role="alert" className="m-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+            Couldn&apos;t load conversations. Check your connection and tap refresh.
           </div>
         ) : filteredThreads.length === 0 ? (
-          <div className="p-4 text-center text-muted-foreground">
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
             {searchQuery ? 'No phone numbers found' : 'No conversations found'}
           </div>
         ) : (
-          <div className="w-full overflow-hidden safe-area-bottom">
+          <div className="w-full overflow-hidden pb-safe-0">
             {filteredThreads.map((thread) => (
               <button
                 key={thread.key}
                 onClick={() => onSelectThread(thread)}
                 className={cn(
-                  'relative min-h-[72px] w-full touch-manipulation overflow-hidden border-b border-[var(--chat-border)] px-3 py-2.5 text-left transition-colors hover:bg-[var(--chat-hover)] active:bg-[var(--chat-hover)] md:min-h-[68px] md:py-2',
+                  'relative min-h-[72px] w-full touch-manipulation overflow-hidden border-b border-[var(--chat-border)] px-4 py-3 text-left transition-colors hover:bg-[var(--chat-hover)] active:bg-[var(--chat-hover)] md:min-h-[68px] md:py-2',
                   selectedThreadKey === thread.key && 'bg-[var(--chat-hover)]'
                 )}
               >

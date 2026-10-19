@@ -144,7 +144,7 @@ export function InteractiveMessageDialog({
         </DialogHeader>
 
         {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+          <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
             {error}
           </div>
         )}
@@ -213,7 +213,7 @@ export function InteractiveMessageDialog({
                       variant="ghost"
                       size="icon"
                       onClick={() => handleRemoveButton(index)}
-                      className="size-11 text-muted-foreground hover:bg-red-50 hover:text-red-600 md:size-10"
+                      className="size-11 text-muted-foreground hover:bg-destructive/10 hover:text-red-600 dark:hover:text-red-300 md:size-10"
                       aria-label={`Remove button ${index + 1}`}
                     >
                       <X className="h-4 w-4" />
@@ -233,7 +233,7 @@ export function InteractiveMessageDialog({
 
         <Separator />
 
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
           <Button variant="outline" className="h-11 sm:h-9" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

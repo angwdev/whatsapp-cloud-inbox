@@ -180,6 +180,12 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  /* Keep content clear of side notches in landscape. */
+  body {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
   button,
   input,
   textarea,
@@ -209,14 +215,16 @@
   }
 }
 
-/* Safe area insets for notched phones (iPhone X+) */
-@supports (padding: env(safe-area-inset-bottom)) {
-  .safe-area-bottom {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-  .safe-area-top {
-    padding-top: env(safe-area-inset-top);
-  }
+/*
+ * Safe-area padding for notched phones. These add the inset to a spacing step
+ * (pt-safe-3 = 0.75rem + top inset) instead of replacing the element's padding.
+ */
+@utility pt-safe-* {
+  padding-top: calc(--spacing(--value(number)) + env(safe-area-inset-top, 0px));
+}
+
+@utility pb-safe-* {
+  padding-bottom: calc(--spacing(--value(number)) + env(safe-area-inset-bottom, 0px));
 }
 
 /* Fix ScrollArea table layout breaking text truncation */

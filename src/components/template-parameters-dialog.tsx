@@ -128,7 +128,7 @@ export function TemplateParametersDialog({
         </DialogHeader>
 
         {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+          <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
             {error}
           </div>
         )}
@@ -167,7 +167,7 @@ export function TemplateParametersDialog({
 
         <Separator />
 
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
           <Button variant="outline" className="h-11 sm:h-9" onClick={onBack}>
             Back
           </Button>
