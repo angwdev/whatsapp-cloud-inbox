@@ -91,6 +91,33 @@ docker run --env-file .env -p 4000:3000 ghcr.io/angwdev/whatsapp-cloud-inbox:lat
 
 Or build and run it locally with `docker compose up --build`. Tags: `latest` (default branch), `main`, `sha-<commit>`, and `1.2.3` / `1.2` for release tags. The first publish creates a private package; make it public under the repository's **Packages** settings if you want anonymous pulls.
 
+### Deploy behind Traefik
+
+`docker-compose.traefik.yml` runs the published image behind [Traefik v3](https://doc.traefik.io/traefik/) with automatic Let's Encrypt certificates. The app publishes no ports; Traefik is the only entry point.
+
+```bash
+# .env: add INBOX_HOST and ACME_EMAIL next to your app variables
+docker network create traefik
+
+# Existing Traefik on the `traefik` network:
+docker compose -f docker-compose.traefik.yml up -d
+
+# Or start the bundled Traefik as well (binds ports 80/443):
+docker compose -f docker-compose.traefik.yml --profile traefik up -d
+```
+
+The labels set up:
+
+- HTTP → HTTPS redirect and a TLS router for `INBOX_HOST` using the `CERT_RESOLVER` resolver (default `letsencrypt`)
+- HSTS, `X-Frame-Options: DENY`, `nosniff`, referrer and permissions policies, and compression
+- A rate limit (10/min, burst 20) on `/login` and `/api/auth/*`
+- Traefik health checks against `/api/health`
+- `AUTH_URL` set to `https://${INBOX_HOST}` so OAuth callbacks use the public URL
+
+The file also has commented examples for an IP allowlist, serving under a path prefix, and wildcard certificates. Set `IMAGE_TAG` to pin a release (for example `1.2.3` or `sha-abc1234`). The app container runs read-only with `no-new-privileges`.
+
+If you use your own Traefik, use v3.6 or newer with Docker Engine 29+. Older Traefik releases speak a Docker API version that Docker 29 rejects.
+
 ## Key Features
 
 ### Template Messages
