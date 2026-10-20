@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { MessagingPreferences } from '@/components/messaging-preferences';
 import { AccountSection } from '@/components/account-section';
 import { ThemeToggle } from '@/components/theme-toggle';
 import type { InboxSettingsResponse, KapsoPhoneNumber } from '@/types/settings';
@@ -248,6 +249,7 @@ export default function SettingsPage() {
 
       <main className="mx-auto w-full max-w-5xl px-4 pt-5 pb-safe-8">
         <AccountSection />
+        <MessagingPreferences />
 
         <section className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>

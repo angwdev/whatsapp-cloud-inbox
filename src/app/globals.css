@@ -98,6 +98,8 @@
   --chat-bubble-outgoing: hsl(142 76% 90%);
   --chat-avatar: hsl(220 13% 91%);
   --chat-check: hsl(142.1 76.2% 36.3%);
+  --chat-tick: hsl(240 4% 52%);
+  --chat-tick-read: #2b9fd9;
   --chat-presence: hsl(142.1 76.2% 36.3%);
   --chat-warning-background: hsl(38 92% 50% / 14%);
   --chat-warning-border: hsl(38 92% 50% / 35%);
@@ -151,6 +153,8 @@
   --chat-bubble-outgoing: #242424;
   --chat-avatar: hsl(240 3.7% 15.9%);
   --chat-check: #53bdeb;
+  --chat-tick: hsl(240 5% 60%);
+  --chat-tick-read: #53bdeb;
   --chat-presence: hsl(142.1 70.6% 45.3%);
   --chat-warning-background: hsl(38 92% 55% / 14%);
   --chat-warning-border: hsl(38 92% 55% / 35%);

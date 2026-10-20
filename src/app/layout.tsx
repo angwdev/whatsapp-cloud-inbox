@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { QueryProvider } from "@/components/query-provider";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 const themeInitScript = `
@@ -70,6 +71,7 @@ export default function RootLayout({
       <body className="antialiased">
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <QueryProvider>{children}</QueryProvider>
+        <Toaster />
       </body>
     </html>
   );

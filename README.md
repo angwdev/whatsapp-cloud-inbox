@@ -8,12 +8,18 @@ A WhatsApp Web-style inbox built with Next.js 16 for the WhatsApp Cloud API. Sen
 
 ## Features
 
-- **Real-time messaging** - Auto-polling keeps conversations updated
-- **Template messages** - Full support for WhatsApp templates with parameters (header, body, buttons)
-- **Interactive messages** - Send button messages with up to 3 custom actions
+- **Real-time messaging** - Optional Kapso webhooks push updates over server-sent events; adaptive polling is the fallback
+- **Template messages** - Text, media and location headers, named or positional parameters, URL, coupon-code and OTP buttons, with a live preview
+- **Interactive messages** - Reply buttons, list menus and CTA links, each with a live preview and WhatsApp's limits enforced
+- **WhatsApp Flows** - Send published or draft flows and read the answers as a form-response card
+- **Location requests** - Ask a contact to share their location and see the reply as a map card
+- **Reactions** - React to customer messages with any emoji and see the contact's reactions on yours
 - **Media support** - Send images, videos, documents, and audio
 - **24-hour window enforcement** - Automatically restricts messaging outside WhatsApp's window
-- **Failed message indicators** - Visual feedback for delivery failures
+- **Optimistic sending** - Messages appear instantly, with retry and delete when WhatsApp rejects them
+- **Readable errors** - WhatsApp error codes become plain explanations (e.g. 131047 switches the chat to templates)
+- **Read receipts and typing** - Opening a chat marks it read and typing shows "typing…" (can be turned off in Settings)
+- **Rich composer** - Multi-line input, Enter to send, per-chat drafts, paste or drop files, size and type checks before upload
 - **WhatsApp-style UI** - Familiar interface with read receipts, timestamps, and message bubbles
 - **Single sign-on** - OIDC, Google, Microsoft Entra ID, and GitHub via Auth.js, with domain/email allowlists
 - **Mobile first** - Touch-sized controls, bottom-sheet dialogs, safe-area insets, and installable as a PWA
@@ -134,19 +140,55 @@ Create button messages without templates:
 - Each button gets a unique ID and title (max 20 chars)
 - Ideal for quick replies, confirmations, menu selections
 
+### Location Requests
+
+Ask the contact to share where they are ([Cloud API docs](https://developers.facebook.com/documentation/business-messaging/whatsapp/messages/location-request-messages)):
+- **Body text (required, max 1024 chars)** with suggested presets and a live preview
+- The contact sees a **Send location** button; the request bubble shows whether they answered and jumps to the reply
+- Shared locations render as a map card (OpenStreetMap tiles) with name, address, coordinates, directions, and copy
+
+### Reactions
+
+React to messages the contact sent ([Cloud API docs](https://developers.facebook.com/documentation/business-messaging/whatsapp/messages/reaction-messages)):
+- **Desktop** - hover a message and click the smiley; **touch** - long-press the message
+- Six quick reactions plus a wider emoji grid; picking your current reaction again removes it
+- Reactions show up immediately and roll back if WhatsApp rejects them
+- Both sides' reactions appear as a chip under the message; removals by the contact clear it
+- Only available inside the 24-hour window and for messages up to 30 days old, as the Cloud API requires
+
+### Real-time updates (optional)
+
+Without configuration the inbox polls: every 10s for the conversation list (30s in a background tab, which keeps notifications working) and every 10–30s for the open chat. The open chat also refetches as soon as the list reports new activity.
+
+For instant updates, point a Kapso phone-number webhook at the inbox:
+
+```bash
+curl -X POST "https://api.kapso.ai/platform/v1/whatsapp/phone_numbers/$PHONE_NUMBER_ID/webhooks" \
+  -H "X-API-Key: $KAPSO_API_KEY" -H "Content-Type: application/json" \
+  -d '{"whatsapp_webhook":{"kind":"kapso","url":"https://inbox.example.com/api/webhooks/kapso","secret_key":"<random secret>",
+       "events":["whatsapp.message.received","whatsapp.message.sent","whatsapp.message.delivered","whatsapp.message.read","whatsapp.message.failed","whatsapp.conversation.created","whatsapp.conversation.ended"]}}'
+```
+
+Then set `KAPSO_WEBHOOK_SECRET` to the same secret. The route checks each delivery's `X-Webhook-Signature` (HMAC-SHA256), ignores retried deliveries, accepts batched payloads, and fans events out to open tabs over `/api/events`. Only IDs reach the browser; each tab refetches the data itself. Polling slows to once a minute while the stream is live. The fan-out is in-process, so run a single replica (or add a shared broker) when using it.
+
 ### 24-Hour Window
 
 Automatically enforces WhatsApp's messaging policy:
-- **Within 24h** - Send regular messages freely
+- **Within 24h** - Send regular messages freely; the header shows how long is left
 - **Outside 24h** - Template-only mode with clear messaging
 - **No inbound messages** - Guide users to send templates
 
 ### Message Types
 
-- ✅ Text messages
-- ✅ Images, videos, audio, documents
+- ✅ Text messages with WhatsApp formatting (*bold*, _italic_, ~strike~, `code`) and clickable links
+- ✅ Images (with a full-size viewer), videos, audio and voice notes, documents, stickers
 - ✅ Template messages (with all parameter types)
-- ✅ Interactive button messages
+- ✅ Interactive reply buttons, list messages and CTA links, plus the contact's button and list replies
+- ✅ WhatsApp Flows and their responses
+- ✅ Shared contacts, orders, unsupported messages and system notices
+- ✅ Loading earlier messages
+- ✅ Location request messages and shared locations
+- ✅ Reactions (send, change, remove, and receive)
 - ✅ Failed message indicators
 
 ## Contributing

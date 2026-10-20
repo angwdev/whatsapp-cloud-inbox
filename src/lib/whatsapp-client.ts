@@ -1,3 +1,4 @@
+import 'server-only';
 import { WhatsAppClient } from '@kapso/whatsapp-cloud-api';
 
 let _whatsappClient: WhatsAppClient | null = null;

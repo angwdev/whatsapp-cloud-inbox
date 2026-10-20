@@ -1,9 +1,14 @@
+import 'server-only';
 import { cookies } from 'next/headers';
+import { InboxConfigurationError } from '@/lib/api-errors';
 import type { InboxSettings, KapsoPhoneNumber } from '@/types/settings';
+
+export { InboxConfigurationError };
 
 export const INBOX_SETTINGS_COOKIE = 'whatsapp-cloud-inbox-settings';
 
-const PHONE_NUMBERS_CACHE_TTL_MS = 60_000;
+// Numbers rarely change; the settings page forces a refresh when it loads.
+const PHONE_NUMBERS_CACHE_TTL_MS = 5 * 60_000;
 
 type PlatformPhoneNumbersResponse = {
   data?: KapsoPhoneNumber[];
@@ -21,16 +26,8 @@ type PhoneNumbersCache = {
 };
 
 let phoneNumbersCache: PhoneNumbersCache | null = null;
-
-export class InboxConfigurationError extends Error {
-  status: number;
-
-  constructor(message: string, status = 500) {
-    super(message);
-    this.name = 'InboxConfigurationError';
-    this.status = status;
-  }
-}
+// Every API route resolves the phone number first; share one Platform API call between them.
+let phoneNumbersRequest: Promise<KapsoPhoneNumber[]> | null = null;
 
 function getKapsoApiBaseUrl(): string {
   const explicitBaseUrl = process.env.KAPSO_API_BASE_URL || process.env.KAPSO_PLATFORM_API_URL;
@@ -166,6 +163,16 @@ export async function fetchKapsoPhoneNumbers(options: { force?: boolean } = {}):
     return phoneNumbersCache.data;
   }
 
+  if (!phoneNumbersRequest) {
+    phoneNumbersRequest = requestKapsoPhoneNumbers().finally(() => {
+      phoneNumbersRequest = null;
+    });
+  }
+
+  return phoneNumbersRequest;
+}
+
+async function requestKapsoPhoneNumbers(): Promise<KapsoPhoneNumber[]> {
   const apiKey = getKapsoApiKey();
   const collectedPhoneNumbers: KapsoPhoneNumber[] = [];
   let page = 1;
@@ -262,12 +269,4 @@ export async function resolvePhoneNumberContext(phoneNumberId?: string): Promise
   return phoneNumber;
 }
 
-export function configurationErrorResponse(error: unknown): Response {
-  const status = error instanceof InboxConfigurationError ? error.status : 500;
-  const message = error instanceof Error ? error.message : 'Inbox configuration error';
 
-  return Response.json(
-    { error: message },
-    { status }
-  );
-}

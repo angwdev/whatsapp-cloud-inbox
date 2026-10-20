@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
-import {
-  configurationErrorResponse,
-  getAvailablePhoneNumbers
-} from '@/lib/inbox-settings';
+import { errorResponse } from '@/lib/api-errors';
+import { getAvailablePhoneNumbers } from '@/lib/inbox-settings';
 
 export async function GET(request: Request) {
   try {
@@ -15,6 +13,6 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error('Error fetching phone numbers:', error);
-    return configurationErrorResponse(error);
+    return errorResponse(error);
   }
 }
