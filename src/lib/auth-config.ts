@@ -81,6 +81,32 @@ export function getSsoProviderSummaries(): SsoProviderSummary[] {
 }
 
 /**
+ * The provider to send signed-out visitors to straight away, skipping the
+ * sign-in page. AUTH_AUTO_REDIRECT=true picks the only configured provider;
+ * with several, set it to a provider ID (oidc, google, microsoft-entra-id, github).
+ */
+export function getAutoRedirectProviderId(): string | null {
+  const setting = env('AUTH_AUTO_REDIRECT');
+  if (!setting || setting === 'false') return null;
+
+  const providers = getSsoProviderSummaries();
+  if (setting === 'true') {
+    return providers.length === 1 ? providers[0].id : null;
+  }
+
+  return providers.find((provider) => provider.id === setting)?.id ?? null;
+}
+
+/** Same-origin relative paths only; rejects protocol-relative URLs like //evil.com. */
+export function safeCallbackUrl(value?: string | string[] | null): string {
+  const callbackUrl = Array.isArray(value) ? value[0] : value;
+  if (!callbackUrl || !callbackUrl.startsWith('/') || callbackUrl.startsWith('//') || callbackUrl.startsWith('/\\')) {
+    return '/';
+  }
+  return callbackUrl;
+}
+
+/**
  * SSO protects every page and API route unless it is explicitly turned off with
  * AUTH_DISABLED=true. Without providers the app stays open in development (so
  * `npm run dev` keeps working) but is locked in production.

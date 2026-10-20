@@ -54,7 +54,7 @@ services:
       traefik.http.routers.inbox.service: inbox
 
       # Stricter limits for the sign-in endpoints (higher priority than the catch-all router).
-      traefik.http.routers.inbox-auth.rule: Host(`${INBOX_HOST}`) && (PathPrefix(`/api/auth`) || Path(`/login`))
+      traefik.http.routers.inbox-auth.rule: Host(`${INBOX_HOST}`) && (PathPrefix(`/api/auth`) || Path(`/login`) || Path(`/login/sso`))
       traefik.http.routers.inbox-auth.entrypoints: websecure
       traefik.http.routers.inbox-auth.tls: "true"
       traefik.http.routers.inbox-auth.tls.certresolver: ${CERT_RESOLVER:-letsencrypt}

@@ -3,5 +3,6 @@
 import { signOut } from '@/auth';
 
 export async function signOutAction() {
-  await signOut({ redirectTo: '/login' });
+  // `signedOut` stops the login page from auto-redirecting straight back into SSO.
+  await signOut({ redirectTo: '/login?signedOut=1' });
 }
