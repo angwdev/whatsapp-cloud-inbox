@@ -67,7 +67,7 @@ const MODES: Array<{ value: Mode; label: string; icon: typeof Reply; hint: strin
   { value: 'cta_url', label: 'Link', icon: Link2, hint: 'A single button that opens a website.' },
 ];
 
-const fieldClassName = 'h-11 border-[var(--chat-border-strong)] bg-[var(--chat-input)] text-base focus-visible:ring-primary md:h-10 md:text-sm';
+const fieldClassName = 'h-11 border-[var(--chat-border-strong)] bg-[var(--chat-input)] text-base md:h-10 md:text-sm';
 
 function newId(): string {
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
@@ -411,7 +411,7 @@ export function InteractiveMessageDialog({
               onKeyDown={handleSubmitShortcut}
               placeholder="Enter your message text"
               required
-              className="min-h-[104px] border-[var(--chat-border-strong)] bg-[var(--chat-input)] text-base focus-visible:ring-primary md:text-sm"
+              className="min-h-[104px] border-[var(--chat-border-strong)] bg-[var(--chat-input)] text-base md:text-sm"
               {...invalidProps('body')}
             />
             <FieldMessage id={`${fieldId('body')}-error`} error={visibleError('body')} />

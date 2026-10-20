@@ -452,7 +452,7 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
             inputMode="search"
             enterKeyHint="search"
             aria-label="Search phone numbers"
-            className="h-11 rounded-md border-[var(--chat-border-strong)] bg-[var(--chat-input)] pl-9 text-base shadow-none md:h-9 md:text-sm focus-visible:ring-1 focus-visible:ring-primary"
+            className="h-11 rounded-xl pl-9 text-base shadow-none md:h-10 md:text-sm"
           />
         </div>
         <div className="mt-3 flex items-center gap-2">

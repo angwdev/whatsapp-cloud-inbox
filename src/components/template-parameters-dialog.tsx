@@ -65,7 +65,7 @@ type Props = {
   onTemplateSent?: () => void;
 };
 
-const FIELD_CLASS = 'border-[var(--chat-border-strong)] bg-[var(--chat-input)] focus-visible:ring-primary';
+const FIELD_CLASS = '';
 const PLACEHOLDER_SPLIT = /\{\{\s*[A-Za-z0-9_]+\s*\}\}/;
 
 const MEDIA_COPY: Record<HeaderMediaFormat, { noun: string; types: string; icon: typeof ImageIcon }> = {

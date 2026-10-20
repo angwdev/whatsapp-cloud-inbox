@@ -1,16 +1,17 @@
 'use client';
 
-import { memo } from 'react';
-import { Check, Clock, MapPin, Mic, RotateCcw, Smile, Trash2, Reply, XCircle } from 'lucide-react';
+import { memo, useRef } from 'react';
+import { Check, Clock, Copy, MapPin, Mic, MoreHorizontal, RotateCcw, Smile, Trash2, Reply, XCircle } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { isLocationRequestMessage, type Message } from '@/lib/inbox-data';
 import { describeWhatsAppError, isWindowClosedError } from '@/lib/whatsapp-errors';
 import { getOutboundReaction } from '@/hooks/use-local-reactions';
 import { Button } from '@/components/ui/button';
-import { Popover, PopoverAnchor, PopoverTrigger } from '@/components/ui/popover';
+import { Popover, PopoverAnchor } from '@/components/ui/popover';
 import { MediaMessage } from '@/components/media-message';
 import { LocationMessage, LocationRequestFooter } from '@/components/location-message';
-import { ReactionChips, ReactionPickerContent } from '@/components/reaction-picker';
+import { MessageActionsContent, ReactionChips, type MessageAction } from '@/components/reaction-picker';
 import { FormattedText } from '@/components/chat/formatted-text';
 import {
   FlowResponseCard,
@@ -57,7 +58,10 @@ function MessageStatus({ message }: { message: Message }) {
 export type MessageRowHandlers = {
   onReply: (message: Message) => void;
   onReact: (message: Message, emoji: string) => void;
+  /** Opens or closes the reactions/actions popover of a message. */
   onPickerChange: (messageId: string | null) => void;
+  /** Opens the full emoji picker as a bottom sheet (phones). */
+  onOpenEmojiSheet: (message: Message) => void;
   onJumpTo: (messageId: string) => void;
   onRetry: (localId: string) => void;
   onDiscard: (localId: string) => void;
@@ -80,8 +84,17 @@ type MessageRowProps = {
   handlers: MessageRowHandlers;
 };
 
-const iconButtonClass =
-  'size-9 flex-shrink-0 text-muted-foreground hover:bg-[var(--chat-hover)] focus-visible:opacity-100 pointer-fine:size-7 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100';
+const toolbarButtonClass =
+  'flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-[var(--chat-hover)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50';
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success('Copied');
+  } catch {
+    toast.error("Couldn't copy the text");
+  }
+}
 
 /**
  * One message in the thread. Memoized: polling returns structurally shared data,
@@ -100,6 +113,9 @@ export const MessageRow = memo(function MessageRow({
   answeredByMessageId,
   handlers,
 }: MessageRowProps) {
+  // Remembered on pointerdown: the popover closes itself on outside presses before the click lands.
+  const wasOpenRef = useRef(false);
+
   if (message.messageType === 'system') {
     return (
       <div className="my-3 flex justify-center px-6">
@@ -119,60 +135,106 @@ export const MessageRow = memo(function MessageRow({
   const mediaId = message.metadata?.mediaId;
   const hasMedia = message.hasMedia && (message.mediaData?.url || mediaId);
 
-  const replyButton = canReply && !message.localState && (
-    <Button
-      type="button"
-      onClick={() => handlers.onReply(message)}
-      variant="ghost"
-      size="icon"
-      className={cn('mt-1', iconButtonClass)}
-      aria-label="Reply to message"
-      title="Reply"
-    >
-      <Reply className="h-3.5 w-3.5" />
-    </Button>
-  );
+  const copyableText = [message.caption, displayContent].filter(Boolean).join('\n');
+  const canInteract = !message.localState;
+  const showReply = canReply && canInteract;
+  const hasActions = canInteract && (canReact || showReply || Boolean(copyableText));
+
+  const touchActions: MessageAction[] = [
+    ...(showReply ? [{ label: 'Reply', icon: <Reply />, onSelect: () => { handlers.onPickerChange(null); handlers.onReply(message); } }] : []),
+    ...(copyableText ? [{ label: 'Copy text', icon: <Copy />, onSelect: () => { handlers.onPickerChange(null); void copyText(copyableText); } }] : []),
+  ];
+
+  const togglePicker = () => handlers.onPickerChange(wasOpenRef.current ? null : message.id);
 
   return (
     <Popover open={isPickerOpen} onOpenChange={(open) => handlers.onPickerChange(open ? message.id : null)}>
       <div
         className={cn(
-          'group mb-2 flex items-start gap-1.5 rounded-lg px-1 py-0.5 transition-colors',
+          'group/row relative mb-1.5 flex items-start rounded-2xl px-1 py-0.5 transition-colors duration-300',
           isOutbound ? 'justify-end' : 'justify-start',
           isHighlighted && 'bg-primary/10',
-          isPickerOpen && 'bg-[var(--chat-hover)]/60',
         )}
       >
-        {isOutbound && replyButton}
-
         <div
           className={cn(
-            'flex min-w-0 max-w-[min(88%,34rem)] flex-col sm:max-w-[min(78%,38rem)] lg:max-w-[min(70%,42rem)]',
+            'relative flex min-w-0 max-w-[min(85%,34rem)] flex-col sm:max-w-[min(75%,38rem)] lg:max-w-[min(65%,42rem)]',
             isOutbound ? 'items-end' : 'items-start',
           )}
         >
+          {hasActions && (
+            // Hover toolbar on pointer devices; touch screens use a long-press instead.
+            <div
+              className={cn(
+                // Beside the bubble, so it never covers the text.
+                'absolute top-1 z-[3] hidden items-center gap-0.5 rounded-full border border-[var(--chat-border-strong)] bg-popover p-0.5 opacity-0 shadow-md transition-[opacity,transform] duration-150 pointer-fine:flex',
+                'group-hover/row:translate-x-0 group-hover/row:opacity-100 group-focus-within/row:translate-x-0 group-focus-within/row:opacity-100',
+                isPickerOpen && 'translate-x-0 opacity-100',
+                isOutbound ? 'right-full mr-1.5 translate-x-1' : 'left-full ml-1.5 -translate-x-1',
+              )}
+            >
+              {canReact && (
+                <button
+                  type="button"
+                  onPointerDown={() => { wasOpenRef.current = isPickerOpen; }}
+                  onClick={togglePicker}
+                  className={cn(toolbarButtonClass, isPickerOpen && 'bg-[var(--chat-hover)] text-foreground')}
+                  aria-label={outboundReaction ? `Change reaction ${outboundReaction.emoji}` : 'React to message'}
+                  aria-haspopup="dialog"
+                  aria-expanded={isPickerOpen}
+                  title="React"
+                >
+                  <Smile className="size-4" />
+                </button>
+              )}
+              {showReply && (
+                <button type="button" onClick={() => handlers.onReply(message)} className={toolbarButtonClass} aria-label="Reply to message" title="Reply">
+                  <Reply className="size-4" />
+                </button>
+              )}
+              {copyableText && (
+                <button type="button" onClick={() => void copyText(copyableText)} className={toolbarButtonClass} aria-label="Copy message text" title="Copy">
+                  <Copy className="size-4" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {hasActions && (
+            // Touch screens open the menu with a long-press; this keeps it reachable for screen readers.
+            <button
+              type="button"
+              onClick={() => handlers.onPickerChange(message.id)}
+              className="sr-only pointer-fine:hidden"
+              aria-haspopup="menu"
+              aria-label="Message actions"
+            >
+              <MoreHorizontal />
+            </button>
+          )}
+
           <PopoverAnchor asChild>
             <div
-              onPointerDown={canReact ? (event) => handlers.onLongPressStart(event, message.id) : undefined}
-              onPointerMove={canReact ? handlers.onLongPressMove : undefined}
-              onPointerUp={canReact ? handlers.onLongPressEnd : undefined}
-              onPointerCancel={canReact ? handlers.onLongPressEnd : undefined}
-              onPointerLeave={canReact ? handlers.onLongPressEnd : undefined}
-              onContextMenu={canReact ? (event) => {
-                // Long-press opens the reaction picker on touch screens instead of the system menu.
+              onPointerDown={hasActions ? (event) => handlers.onLongPressStart(event, message.id) : undefined}
+              onPointerMove={hasActions ? handlers.onLongPressMove : undefined}
+              onPointerUp={hasActions ? handlers.onLongPressEnd : undefined}
+              onPointerCancel={hasActions ? handlers.onLongPressEnd : undefined}
+              onPointerLeave={hasActions ? handlers.onLongPressEnd : undefined}
+              onContextMenu={hasActions ? (event) => {
+                // Long-press opens the message menu on touch screens instead of the system menu.
                 if (window.matchMedia('(pointer: coarse)').matches) event.preventDefault();
               } : undefined}
               className={cn(
-                'relative max-w-full rounded-lg px-3 py-2 shadow-sm transition-[box-shadow,transform,opacity] duration-150',
+                'relative max-w-full rounded-2xl px-3 py-2 text-foreground shadow-[0_1px_1px_rgb(0_0_0/0.08),0_1px_3px_rgb(0_0_0/0.04)] transition-[box-shadow,transform,opacity] duration-200 ease-out',
                 isOutbound
-                  ? 'rounded-br-none bg-[var(--chat-bubble-outgoing)] text-foreground'
-                  : 'rounded-bl-none bg-[var(--chat-bubble-incoming)] text-foreground',
-                canReact && '[-webkit-touch-callout:none]',
+                  ? 'rounded-br-md bg-[var(--chat-bubble-outgoing)]'
+                  : 'rounded-bl-md bg-[var(--chat-bubble-incoming)]',
+                hasActions && 'pointer-coarse:select-none [-webkit-touch-callout:none]',
                 (hasCard || message.interactiveSummary) && 'overflow-hidden',
                 message.localState === 'sending' && 'opacity-80',
                 isLocalFailure && 'ring-1 ring-red-500/40',
                 isHighlighted && 'ring-2 ring-primary/35',
-                isPickerOpen && 'ring-2 ring-primary/25 pointer-coarse:scale-[0.98]',
+                isPickerOpen && 'z-[2] shadow-lg ring-2 ring-primary/30 pointer-coarse:scale-[1.02]',
               )}
             >
               {message.repliedTo && (
@@ -293,35 +355,16 @@ export const MessageRow = memo(function MessageRow({
             onClick={canReact ? () => handlers.onPickerChange(message.id) : undefined}
           />
         </div>
-
-        {!isOutbound && (canReact || replyButton) && (
-          // `relative` keeps the visually hidden react button inside the scroll area.
-          <div className="relative mt-1 flex flex-shrink-0 items-center gap-0.5">
-            {canReact && (
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  // Touch screens open the picker with a long-press; the button stays for screen readers.
-                  className="text-muted-foreground hover:bg-[var(--chat-hover)] focus-visible:opacity-100 pointer-coarse:sr-only pointer-fine:size-7 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100 data-[state=open]:opacity-100"
-                  aria-label={outboundReaction ? `Change reaction ${outboundReaction.emoji}` : 'React to message'}
-                  title="React"
-                >
-                  <Smile className="h-3.5 w-3.5" />
-                </Button>
-              </PopoverTrigger>
-            )}
-            {replyButton && <div className="-mt-1">{replyButton}</div>}
-          </div>
-        )}
       </div>
 
       {isPickerOpen && (
-        <ReactionPickerContent
+        <MessageActionsContent
+          align={isOutbound ? 'end' : 'start'}
           currentEmoji={outboundReaction?.emoji}
-          align="start"
-          onSelect={(emoji) => handlers.onReact(message, emoji)}
+          onReact={canReact ? (emoji) => handlers.onReact(message, emoji) : undefined}
+          onOpenEmojiSheet={canReact ? () => { handlers.onPickerChange(null); handlers.onOpenEmojiSheet(message); } : undefined}
+          // Pointer devices have these in the hover toolbar.
+          actions={typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches ? touchActions : []}
         />
       )}
     </Popover>

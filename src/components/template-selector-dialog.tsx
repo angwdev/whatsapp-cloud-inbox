@@ -361,7 +361,7 @@ export function TemplateSelectorDialog({ open, onOpenChange, phoneNumber, phoneN
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search by name or text"
                 aria-label="Search templates"
-                className="border-[var(--chat-border-strong)] bg-[var(--chat-input)] pl-9 focus-visible:ring-primary"
+                className="border-[var(--chat-border-strong)] bg-[var(--chat-input)] pl-9"
               />
             </div>
             <Button

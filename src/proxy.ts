@@ -30,8 +30,8 @@ export default auth((request) => {
 });
 
 export const config = {
-  // Everything except Auth.js endpoints, the health probe, signed webhooks, and static assets.
+  // Everything except Auth.js endpoints, the health probe, signed webhooks, emoji data, and static assets.
   matcher: [
-    '/((?!api/auth|api/health|api/webhooks|_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|icon|apple-icon).*)',
+    '/((?!api/auth|api/health|api/webhooks|emojibase|_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|icon|apple-icon).*)',
   ],
 };

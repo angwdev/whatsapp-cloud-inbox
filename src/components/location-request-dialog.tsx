@@ -149,7 +149,7 @@ export function LocationRequestDialog({
               placeholder="Tell the contact why you need their location"
               aria-invalid={remaining < 0 || undefined}
               aria-describedby="location-request-hint"
-              className="min-h-[104px] border-[var(--chat-border-strong)] bg-[var(--chat-input)] text-base focus-visible:ring-primary md:text-sm"
+              className="min-h-[104px] border-[var(--chat-border-strong)] bg-[var(--chat-input)] text-base md:text-sm"
             />
             <div className="flex flex-wrap gap-1.5" aria-label="Suggested messages">
               {PRESETS.map((preset) => (
