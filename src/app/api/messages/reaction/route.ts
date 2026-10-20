@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { SendMessageResponse } from '@kapso/whatsapp-cloud-api';
-import { configurationErrorResponse, resolvePhoneNumberContext } from '@/lib/inbox-settings';
+import { errorResponse } from '@/lib/api-errors';
+import { resolvePhoneNumberContext } from '@/lib/inbox-settings';
+import { recipientFields } from '@/lib/recipient';
 import { getWhatsAppClient } from '@/lib/whatsapp-client';
 
 const EMOJI_PATTERN = /\p{Extended_Pictographic}|\p{Regional_Indicator}/u;
@@ -43,7 +45,7 @@ export async function POST(request: Request) {
       body: {
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
-        to,
+        ...recipientFields(to),
         type: 'reaction',
         reaction: {
           message_id: messageId,
@@ -56,6 +58,6 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (error) {
     console.error('Error sending reaction:', error);
-    return configurationErrorResponse(error);
+    return errorResponse(error);
   }
 }

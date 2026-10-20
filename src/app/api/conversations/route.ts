@@ -4,9 +4,28 @@ import {
   type ConversationKapsoExtensions,
   type ConversationRecord
 } from '@kapso/whatsapp-cloud-api';
-import { configurationErrorResponse, getTrackedPhoneNumbers } from '@/lib/inbox-settings';
+import { errorResponse } from '@/lib/api-errors';
+import { getTrackedPhoneNumbers } from '@/lib/inbox-settings';
 import { whatsappClient } from '@/lib/whatsapp-client';
 import type { KapsoPhoneNumber } from '@/types/settings';
+
+const MESSAGE_TYPE_LABELS: Record<string, string> = {
+  image: '📷 Photo',
+  video: '🎥 Video',
+  audio: '🎤 Audio',
+  document: '📄 Document',
+  sticker: 'Sticker',
+  location: '📍 Location',
+  contacts: '👤 Contact',
+  template: 'Template',
+  interactive: 'Interactive message',
+  order: '🛒 Order',
+  reaction: 'Reaction',
+};
+
+function readTimestamp(value: unknown): string | undefined {
+  return typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? value : undefined;
+}
 
 function parseDirection(kapso?: ConversationKapsoExtensions): 'inbound' | 'outbound' {
   if (!kapso) {
@@ -82,8 +101,10 @@ export async function GET(request: Request) {
       response.data.map((conversation: ConversationRecord) => {
         const kapso = conversation.kapso;
 
-        const lastMessageText = typeof kapso?.lastMessageText === 'string' ? kapso.lastMessageText : undefined;
         const lastMessageType = typeof kapso?.lastMessageType === 'string' ? kapso.lastMessageType : undefined;
+        const lastMessageText = (typeof kapso?.lastMessageText === 'string' && kapso.lastMessageText.trim())
+          ? kapso.lastMessageText
+          : lastMessageType ? MESSAGE_TYPE_LABELS[lastMessageType] : undefined;
 
         return {
           id: conversation.id,
@@ -97,6 +118,8 @@ export async function GET(request: Request) {
           metadata: conversation.metadata ?? {},
           contactName: typeof kapso?.contactName === 'string' ? kapso.contactName : undefined,
           messagesCount: typeof kapso?.messagesCount === 'number' ? kapso.messagesCount : undefined,
+          lastInboundAt: readTimestamp(kapso?.lastInboundAt),
+          lastOutboundAt: readTimestamp(kapso?.lastOutboundAt),
           lastMessage: lastMessageText
             ? {
                 content: lastMessageText,
@@ -116,6 +139,6 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error('Error fetching conversations:', error);
-    return configurationErrorResponse(error);
+    return errorResponse(error);
   }
 }

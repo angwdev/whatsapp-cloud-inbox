@@ -11,10 +11,12 @@ import {
   groupConversationsByPhoneNumber,
 } from '@/lib/inbox-data';
 import { NOTIFICATION_CLICK_MESSAGE } from '@/lib/notifications';
+import { useRealtimeUpdates } from '@/hooks/use-realtime';
 
 export default function Home() {
   const [selectedThreadKey, setSelectedThreadKey] = useState<string>();
   const queryClient = useQueryClient();
+  const realtimeConnected = useRealtimeUpdates();
 
   const { data: conversations = [] } = useQuery({
     queryKey: CONVERSATIONS_QUERY_KEY,
@@ -82,8 +84,10 @@ export default function Home() {
         onSelectThread={handleSelectThread}
         selectedThreadKey={selectedThreadKey}
         isHidden={!!selectedThread}
+        realtimeConnected={realtimeConnected}
       />
       <MessageView
+        threadKey={selectedThread?.key}
         conversationId={selectedThread?.latestConversation.id}
         conversations={selectedThread?.conversations || []}
         phoneNumber={selectedThread?.phoneNumber}
@@ -92,6 +96,8 @@ export default function Home() {
         inboxDisplayName={selectedThread?.inboxDisplayName}
         contactName={selectedThread?.contactName}
         lastActiveAt={selectedThread?.lastActiveAt}
+        lastInboundAt={selectedThread?.lastInboundAt}
+        realtimeConnected={realtimeConnected}
         onTemplateSent={handleTemplateSent}
         onBack={handleBackToList}
         isVisible={!!selectedThread}

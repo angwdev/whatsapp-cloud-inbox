@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
+import { errorResponse } from '@/lib/api-errors';
 import {
   INBOX_SETTINGS_COOKIE,
-  configurationErrorResponse,
   getAvailablePhoneNumbers,
   getTrackedPhoneNumbers,
   readStoredInboxSettings,
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error('Error fetching inbox settings:', error);
-    return configurationErrorResponse(error);
+    return errorResponse(error);
   }
 }
 
@@ -68,6 +68,6 @@ export async function PUT(request: Request) {
     return response;
   } catch (error) {
     console.error('Error saving inbox settings:', error);
-    return configurationErrorResponse(error);
+    return errorResponse(error);
   }
 }

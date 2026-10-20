@@ -138,9 +138,10 @@ type Props = {
   onSelectThread: (thread: ConversationThread) => void;
   selectedThreadKey?: string;
   isHidden?: boolean;
+  realtimeConnected?: boolean;
 };
 
-export function ConversationList({ onSelectThread, selectedThreadKey, isHidden = false }: Props) {
+export function ConversationList({ onSelectThread, selectedThreadKey, isHidden = false, realtimeConnected = false }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ConversationStatusFilter>('active');
   const [refreshing, setRefreshing] = useState(false);
@@ -162,7 +163,14 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
   } = useQuery({
     queryKey: CONVERSATIONS_QUERY_KEY,
     queryFn: fetchConversations,
-    refetchInterval: 10_000,
+    // Webhook events refresh the list right away; polling is the fallback.
+    refetchInterval: () => {
+      if (realtimeConnected) return 60_000;
+      if (typeof document !== 'undefined' && document.hidden) return 30_000;
+      return 10_000;
+    },
+    // Notifications only work if the list keeps checking while the tab is in the background.
+    refetchIntervalInBackground: notificationsEnabled,
   });
 
   const threads = useMemo(

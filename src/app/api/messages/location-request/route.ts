@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { configurationErrorResponse, resolvePhoneNumberContext } from '@/lib/inbox-settings';
+import { errorResponse } from '@/lib/api-errors';
+import { resolvePhoneNumberContext } from '@/lib/inbox-settings';
+import { recipientFields } from '@/lib/recipient';
 import { whatsappClient } from '@/lib/whatsapp-client';
 import { LOCATION_REQUEST_BODY_MAX_LENGTH, LOCATION_REQUEST_INTERACTIVE_TYPE } from '@/lib/inbox-data';
 
@@ -31,11 +33,11 @@ export async function POST(request: Request) {
     );
     const phoneNumberId = configuredPhoneNumber.phone_number_id;
 
-    // Built as a raw payload: the SDK's sendInteractiveLocationRequest names the
-    // action `location_request_message`, while the Cloud API expects `send_location`.
+    // Built as a raw payload: the SDK's sendInteractiveLocationRequest adds a
+    // `parameters.requestMessage` field the Cloud API doesn't document.
     const result = await whatsappClient.messages.sendInteractiveRaw({
       phoneNumberId,
-      to,
+      ...recipientFields(to),
       contextMessageId,
       interactive: {
         type: LOCATION_REQUEST_INTERACTIVE_TYPE,
@@ -51,6 +53,6 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     console.error('Error sending location request:', error);
-    return configurationErrorResponse(error);
+    return errorResponse(error);
   }
 }

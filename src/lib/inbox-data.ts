@@ -14,6 +14,9 @@ export type Conversation = {
   metadata?: Record<string, unknown>;
   contactName?: string;
   messagesCount?: number;
+  /** When the contact last wrote; opens the 24-hour customer service window. */
+  lastInboundAt?: string;
+  lastOutboundAt?: string;
   lastMessage?: {
     content: string;
     direction: string;
@@ -35,6 +38,41 @@ export type MessageLocation = {
   name?: string;
   address?: string;
   url?: string;
+};
+
+export type SharedContact = {
+  name: string;
+  organization?: string;
+  phones: Array<{ phone: string; waId?: string; type?: string }>;
+  emails: string[];
+};
+
+/** A tap on a reply button, list row or template quick-reply button. */
+export type InteractiveReply = {
+  kind: 'button' | 'list' | 'template_button';
+  title: string;
+  id?: string;
+  description?: string;
+};
+
+export type OrderSummary = {
+  catalogId?: string;
+  text?: string;
+  items: Array<{ productId: string; quantity: number; price?: number; currency?: string }>;
+};
+
+/** What an outbound interactive message offered the contact. */
+export type InteractiveSummary = {
+  header?: string;
+  footer?: string;
+  buttons?: string[];
+  cta?: string;
+};
+
+export type MessageError = {
+  code?: number;
+  title?: string;
+  message?: string;
 };
 
 export const LOCATION_REQUEST_INTERACTIVE_TYPE = 'location_request_message';
@@ -64,6 +102,16 @@ export type Message = {
   reactions?: MessageReaction[];
   location?: MessageLocation | null;
   interactiveType?: string | null;
+  interactiveReply?: InteractiveReply | null;
+  interactiveSummary?: InteractiveSummary | null;
+  contacts?: SharedContact[] | null;
+  order?: OrderSummary | null;
+  /** Answers from a WhatsApp Flow (nfm_reply), keyed as the flow defined them. */
+  flowResponse?: Record<string, unknown> | null;
+  /** Why WhatsApp failed to deliver an outbound message, or couldn't parse an inbound one. */
+  errors?: MessageError[] | null;
+  /** Set on messages sent from this browser that the history doesn't list yet. */
+  localState?: 'sending' | 'failed';
   contextMessageId?: string | null;
   repliedTo?: {
     id: string;
@@ -97,6 +145,7 @@ export type ConversationThread = {
   previousConversationIds: string[];
   status: string;
   lastActiveAt?: string;
+  lastInboundAt?: string;
   lastMessage?: Conversation['lastMessage'];
 };
 
@@ -133,37 +182,95 @@ function byMostRecentConversation(a: Conversation, b: Conversation): number {
   return b.id.localeCompare(a.id);
 }
 
+async function readJson<T>(response: Response, fallback: string): Promise<T> {
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error((data as { error?: string } | null)?.error || fallback);
+  }
+  return data as T;
+}
+
 export async function fetchConversations(): Promise<Conversation[]> {
   const response = await fetch('/api/conversations?limit=100');
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.error || 'Failed to fetch conversations');
-  }
-
+  const data = await readJson<{ data?: Conversation[] }>(response, 'Failed to fetch conversations');
   return data.data || [];
 }
 
-export async function fetchConversationMessages(conversationId: string, phoneNumberId?: string): Promise<Message[]> {
-  const params = new URLSearchParams({ limit: '100' });
-  if (phoneNumberId) {
-    params.set('phoneNumberId', phoneNumberId);
-  }
+/** One conversation's loaded history: the newest page plus any older pages the agent asked for. */
+export type ConversationMessages = {
+  messages: Message[];
+  /** Cursor for the next older page, or null once the start of the conversation is loaded. */
+  olderCursor: string | null;
+  /** True after older pages were loaded, so polling the newest page keeps them. */
+  extended: boolean;
+};
 
-  const response = await fetch(`/api/messages/${conversationId}?${params.toString()}`);
-  const data = await response.json();
+const MESSAGES_PAGE_SIZE = 100;
 
-  if (!response.ok) {
-    throw new Error(data.error || 'Failed to fetch messages');
-  }
+async function fetchMessagesPage(conversationId: string, phoneNumberId?: string, after?: string) {
+  const params = new URLSearchParams({ limit: String(MESSAGES_PAGE_SIZE) });
+  if (phoneNumberId) params.set('phoneNumberId', phoneNumberId);
+  if (after) params.set('after', after);
 
-  const messages = (data.data || []).map((message: Omit<Message, 'conversationId'>) => ({
+  const response = await fetch(`/api/messages/${encodeURIComponent(conversationId)}?${params.toString()}`);
+  const data = await readJson<{ data?: Array<Omit<Message, 'conversationId'>>; paging?: { olderCursor?: string | null } }>(
+    response,
+    'Failed to fetch messages',
+  );
+
+  const messages = (data.data || []).map((message) => ({
     ...message,
     phoneNumberId: message.phoneNumberId ?? phoneNumberId ?? '',
     conversationId,
   }));
 
-  return normalizeMessages(messages, { keepOrphanReactions: true });
+  return { messages, olderCursor: data.paging?.olderCursor ?? null };
+}
+
+function mergeById(newer: Message[], older: Message[]): Message[] {
+  const seen = new Set(newer.map(message => message.id));
+  return [...newer, ...older.filter(message => !seen.has(message.id))];
+}
+
+/**
+ * Fetches the newest page of a conversation. When older pages were loaded before,
+ * they stay, so a background refresh doesn't collapse a thread the agent scrolled back in.
+ */
+export async function fetchConversationMessages(
+  conversationId: string,
+  phoneNumberId?: string,
+  previous?: ConversationMessages,
+): Promise<ConversationMessages> {
+  const page = await fetchMessagesPage(conversationId, phoneNumberId);
+
+  if (previous?.extended) {
+    return {
+      messages: normalizeMessages(mergeById(page.messages, previous.messages), { keepOrphanReactions: true }),
+      olderCursor: previous.olderCursor,
+      extended: true,
+    };
+  }
+
+  return {
+    messages: normalizeMessages(page.messages, { keepOrphanReactions: true }),
+    olderCursor: page.olderCursor,
+    extended: false,
+  };
+}
+
+export async function fetchOlderConversationMessages(
+  conversationId: string,
+  phoneNumberId: string | undefined,
+  current: ConversationMessages,
+): Promise<ConversationMessages> {
+  if (!current.olderCursor) return current;
+
+  const page = await fetchMessagesPage(conversationId, phoneNumberId, current.olderCursor);
+  return {
+    messages: normalizeMessages(mergeById(current.messages, page.messages), { keepOrphanReactions: true }),
+    olderCursor: page.olderCursor,
+    extended: true,
+  };
 }
 
 export function groupConversationsByPhoneNumber(conversations: Conversation[]): ConversationThread[] {
@@ -195,6 +302,10 @@ export function groupConversationsByPhoneNumber(conversations: Conversation[]): 
         previousConversationIds: sortedConversations.slice(1).map(conversation => conversation.id),
         status: latestConversation.status,
         lastActiveAt: latestConversation.lastActiveAt,
+        lastInboundAt: sortedConversations
+          .map(conversation => conversation.lastInboundAt)
+          .filter((timestamp): timestamp is string => Boolean(timestamp))
+          .sort((a, b) => parseTimestamp(b) - parseTimestamp(a))[0],
         lastMessage: latestConversation.lastMessage,
       };
     })

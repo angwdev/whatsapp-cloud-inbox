@@ -1,82 +1,93 @@
 import { NextResponse } from 'next/server';
-import { configurationErrorResponse, resolvePhoneNumberContext } from '@/lib/inbox-settings';
+import { BadRequestError, errorResponse } from '@/lib/api-errors';
+import { resolvePhoneNumberContext } from '@/lib/inbox-settings';
+import { recipientFields } from '@/lib/recipient';
+import { MEDIA_CAPTION_MAX_LENGTH, TEXT_BODY_MAX_LENGTH, validateOutboundMedia } from '@/lib/media-limits';
 import { whatsappClient } from '@/lib/whatsapp-client';
+
+const URL_PATTERN = /\bhttps?:\/\/\S+/i;
+
+function readText(formData: FormData, key: string): string | undefined {
+  const value = formData.get(key);
+  return typeof value === 'string' && value.trim() ? value : undefined;
+}
 
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
-    const to = formData.get('to') as string;
-    const body = formData.get('body') as string;
-    const file = formData.get('file') as File | null;
-    const contextMessageId = (formData.get('contextMessageId') as string | null)?.trim() || undefined;
-    const configuredPhoneNumber = await resolvePhoneNumberContext(formData.get('phoneNumberId') as string | undefined);
-    const phoneNumberId = configuredPhoneNumber.phone_number_id;
+    const to = readText(formData, 'to')?.trim();
+    const body = readText(formData, 'body');
+    const fileEntry = formData.get('file');
+    const file = fileEntry instanceof File && fileEntry.size > 0 ? fileEntry : null;
+    const contextMessageId = readText(formData, 'contextMessageId')?.trim();
 
-    if (!to) {
-      return NextResponse.json(
-        { error: 'Missing required field: to' },
-        { status: 400 }
-      );
-    }
+    if (!to) throw new BadRequestError('Missing required field: to');
+    if (!body && !file) throw new BadRequestError('Either body or file is required');
+
+    const configuredPhoneNumber = await resolvePhoneNumberContext(readText(formData, 'phoneNumberId'));
+    const phoneNumberId = configuredPhoneNumber.phone_number_id;
+    const base = { phoneNumberId, ...recipientFields(to), contextMessageId };
 
     let result;
 
-    // Send media message
     if (file) {
-      const fileType = file.type.split('/')[0]; // image, video, audio, application
-      const mediaType = fileType === 'application' ? 'document' : fileType;
+      const validation = validateOutboundMedia(file);
+      if (!validation.ok) throw new BadRequestError(validation.reason);
 
-      // Upload media first
-      const uploadResult = await whatsappClient.media.upload({
+      const { mediaType, mimeType } = validation;
+      const caption = body?.trim() || undefined;
+      const supportsCaption = mediaType !== 'audio' && mediaType !== 'sticker';
+      if (caption && supportsCaption && caption.length > MEDIA_CAPTION_MAX_LENGTH) {
+        throw new BadRequestError(`Captions can be up to ${MEDIA_CAPTION_MAX_LENGTH} characters`);
+      }
+
+      const upload = await whatsappClient.media.upload({
         phoneNumberId,
-        type: mediaType as 'image' | 'video' | 'audio' | 'document',
-        file: file,
-        fileName: file.name
+        // The Cloud API expects the file's MIME type here.
+        type: mimeType,
+        file,
+        fileName: file.name,
       });
 
-      // Send message with media
-      if (mediaType === 'image') {
-        result = await whatsappClient.messages.sendImage({
-          phoneNumberId,
-          to,
-          contextMessageId,
-          image: { id: uploadResult.id, caption: body || undefined }
-        });
-      } else if (mediaType === 'video') {
-        result = await whatsappClient.messages.sendVideo({
-          phoneNumberId,
-          to,
-          contextMessageId,
-          video: { id: uploadResult.id, caption: body || undefined }
-        });
-      } else if (mediaType === 'audio') {
-        result = await whatsappClient.messages.sendAudio({
-          phoneNumberId,
-          to,
-          contextMessageId,
-          audio: { id: uploadResult.id }
-        });
-      } else {
-        result = await whatsappClient.messages.sendDocument({
-          phoneNumberId,
-          to,
-          contextMessageId,
-          document: { id: uploadResult.id, caption: body || undefined, filename: file.name }
-        });
+      switch (mediaType) {
+        case 'image':
+          result = await whatsappClient.messages.sendImage({ ...base, image: { id: upload.id, caption } });
+          break;
+        case 'video':
+          result = await whatsappClient.messages.sendVideo({ ...base, video: { id: upload.id, caption } });
+          break;
+        case 'audio':
+          // OGG/Opus files play as voice notes, with the waveform and "played" receipts.
+          result = await whatsappClient.messages.sendAudio({
+            ...base,
+            audio: { id: upload.id, ...(mimeType === 'audio/ogg' && { voice: true }) },
+          });
+          break;
+        case 'sticker':
+          result = await whatsappClient.messages.sendSticker({ ...base, sticker: { id: upload.id } });
+          break;
+        default:
+          result = await whatsappClient.messages.sendDocument({
+            ...base,
+            document: { id: upload.id, caption, filename: file.name },
+          });
+      }
+
+      // Audio and stickers can't carry a caption, so the text follows as its own message.
+      if (caption && !supportsCaption) {
+        await whatsappClient.messages.sendText({ phoneNumberId, ...recipientFields(to), body: caption.slice(0, TEXT_BODY_MAX_LENGTH) });
       }
     } else if (body) {
-      // Send text message
+      if (body.length > TEXT_BODY_MAX_LENGTH) {
+        throw new BadRequestError(`Messages can be up to ${TEXT_BODY_MAX_LENGTH} characters`);
+      }
+
       result = await whatsappClient.messages.sendText({
-        phoneNumberId,
-        to,
-        contextMessageId,
-        body
+        ...base,
+        body,
+        // Let WhatsApp render a link preview when the message contains a URL.
+        previewUrl: URL_PATTERN.test(body),
       });
-    } else {
-      return NextResponse.json(
-        { error: 'Either body or file is required' },
-        { status: 400 }
-      );
     }
 
     return NextResponse.json(
@@ -86,6 +97,6 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     console.error('Error sending message:', error);
-    return configurationErrorResponse(error);
+    return errorResponse(error);
   }
 }
