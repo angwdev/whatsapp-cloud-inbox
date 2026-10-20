@@ -1,7 +1,7 @@
 'use client';
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
-import { ListTree, MapPin, Paperclip, Plus, Reply, Send, Workflow, X } from 'lucide-react';
+import { FileText, ListTree, MapPin, Paperclip, Plus, Reply, SendHorizontal, Workflow, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
@@ -11,7 +11,6 @@ import {
   formatBytes,
   validateOutboundMedia,
 } from '@/lib/media-limits';
-import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 const DRAFTS_STORAGE_KEY = 'whatsapp-cloud-inbox-drafts';
@@ -196,173 +195,174 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   ];
 
   return (
-    <>
-      {replyTarget && (
-        <div className="border-b border-[var(--chat-border-strong)] bg-[var(--chat-surface)] px-4 py-2 animate-in fade-in-0 slide-in-from-bottom-1 duration-150">
-          <div className="mx-auto flex w-full max-w-[900px] items-center gap-2">
-            <Reply aria-hidden="true" className="h-4 w-4 flex-shrink-0 text-primary" />
-            <div className="min-w-0 flex-1 border-l-2 border-primary/60 pl-2">
-              <p className="truncate text-xs font-medium text-primary">Replying to {replyTarget.senderLabel}</p>
-              <p className="truncate text-xs text-muted-foreground">{replyTarget.preview}</p>
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+      className="mx-auto flex w-full max-w-[900px] items-end gap-2 px-2.5 py-2 sm:px-4 sm:py-3"
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        onChange={(event) => {
+          const selected = event.target.files?.[0];
+          if (selected) attachFile(selected);
+          event.target.value = '';
+        }}
+        accept={MEDIA_ACCEPT}
+        className="hidden"
+        tabIndex={-1}
+      />
+
+      {/* One field holds the reply preview, attachment, text and the inline buttons. */}
+      <div
+        className={cn(
+          'min-w-0 flex-1 overflow-hidden rounded-[1.375rem] border border-[var(--chat-border-strong)] bg-[var(--chat-input)] shadow-sm transition-[border-color,box-shadow] duration-150',
+          'focus-within:border-primary/40 focus-within:shadow-[0_0_0_4px_color-mix(in_oklab,var(--primary)_10%,transparent)]',
+          overLimit && 'border-red-500/60 focus-within:border-red-500/60 focus-within:shadow-[0_0_0_4px_rgb(239_68_68/0.14)]',
+        )}
+      >
+        {replyTarget && (
+          <div className="m-1.5 mb-0 flex items-center gap-2 rounded-2xl bg-[var(--chat-hover)] py-1.5 pl-3 pr-1 animate-in fade-in-0 slide-in-from-bottom-1 duration-150">
+            <div className="min-w-0 flex-1 border-l-[3px] border-primary pl-2">
+              <p className="flex items-center gap-1 truncate text-xs font-semibold text-primary">
+                <Reply aria-hidden="true" className="size-3 flex-shrink-0" />
+                Replying to {replyTarget.senderLabel}
+              </p>
+              <p className="truncate text-[13px] text-muted-foreground">{replyTarget.preview}</p>
             </div>
-            <Button
-              onClick={onCancelReply}
+            <button
               type="button"
-              variant="ghost"
-              size="icon"
-              className="size-11 flex-shrink-0 text-muted-foreground md:size-8"
+              onClick={onCancelReply}
+              className="flex size-9 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground"
               aria-label="Cancel reply"
               title="Cancel reply (Esc)"
             >
-              <X className="h-4 w-4" />
-            </Button>
+              <X className="size-4" />
+            </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {file && (
-        <div className="border-b border-[var(--chat-border-strong)] bg-[var(--chat-surface)] px-4 py-3 animate-in fade-in-0 slide-in-from-bottom-1 duration-150">
-          <div className="mx-auto flex w-full max-w-[900px] items-center gap-3">
+        {file && (
+          <div className="m-1.5 mb-0 flex items-center gap-3 rounded-2xl bg-[var(--chat-hover)] p-1.5 pr-1 animate-in fade-in-0 slide-in-from-bottom-1 duration-150">
             {filePreview ? (
               // eslint-disable-next-line @next/next/no-img-element -- local object URL preview
-              <img src={filePreview} alt="" className="size-14 rounded-md object-cover outline outline-1 [outline-color:var(--chat-media-outline)]" />
+              <img src={filePreview} alt="" className="size-12 rounded-xl object-cover" />
             ) : (
-              <div className="flex size-14 items-center justify-center rounded-md bg-[var(--chat-hover)]">
-                <Paperclip aria-hidden="true" className="h-6 w-6 text-muted-foreground" />
+              <div className="flex size-12 items-center justify-center rounded-xl bg-background/70">
+                <FileText aria-hidden="true" className="size-5 text-primary" />
               </div>
             )}
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-foreground">{file.name}</p>
-              <p className="text-xs tabular-nums text-muted-foreground">
-                {formatBytes(file.size)} · Add a caption below (optional)
-              </p>
+              <p className="text-xs tabular-nums text-muted-foreground">{formatBytes(file.size)} · Caption optional</p>
             </div>
-            <Button
-              onClick={clearFile}
+            <button
               type="button"
-              variant="ghost"
-              size="icon"
-              className="size-11 text-muted-foreground md:size-10"
+              onClick={clearFile}
+              className="flex size-9 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground"
               aria-label="Remove attachment"
             >
-              <X className="h-4 w-4" />
-            </Button>
+              <X className="size-4" />
+            </button>
           </div>
-        </div>
-      )}
+        )}
 
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          submit();
-        }}
-        className="mx-auto flex w-full max-w-[900px] items-end gap-1.5 px-3 py-2.5 sm:gap-2 sm:p-3"
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          onChange={(event) => {
-            const selected = event.target.files?.[0];
-            if (selected) attachFile(selected);
-            event.target.value = '';
-          }}
-          accept={MEDIA_ACCEPT}
-          className="hidden"
-          tabIndex={-1}
-        />
-        <Button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={disabled}
-          variant="ghost"
-          size="icon"
-          className="size-11 text-muted-foreground hover:bg-[var(--chat-icon-hover)] md:size-10"
-          aria-label="Attach file"
-          title="Attach file (or paste / drop it)"
-        >
-          <Paperclip className="h-5 w-5" />
-        </Button>
-
-        <Popover open={showActions} onOpenChange={setShowActions}>
-          <PopoverTrigger asChild>
-            <Button
-              type="button"
-              disabled={disabled}
-              size="icon"
-              variant="ghost"
-              className="size-11 text-muted-foreground hover:bg-[var(--chat-hover)] data-[state=open]:bg-[var(--chat-hover)] data-[state=open]:text-primary md:size-10"
-              aria-label="More message types"
-              title="More message types"
-            >
-              <Plus className={cn('h-5 w-5 transition-transform duration-200', showActions && 'rotate-45')} />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent side="top" align="start" className="w-72 p-1">
-            {actions.map((action) => (
+        <div className="flex items-end">
+          <Popover open={showActions} onOpenChange={setShowActions}>
+            <PopoverTrigger asChild>
               <button
-                key={action.label}
                 type="button"
-                onClick={() => {
-                  setShowActions(false);
-                  action.onSelect();
-                }}
-                className="flex min-h-14 w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--chat-hover)] focus-visible:bg-[var(--chat-hover)] focus-visible:outline-none"
+                disabled={disabled}
+                className="m-1 flex size-9 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-[var(--chat-hover)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50 data-[state=open]:bg-primary/12 data-[state=open]:text-primary"
+                aria-label="More message types"
+                title="More message types"
               >
-                <span className="flex size-9 flex-shrink-0 items-center justify-center rounded-full bg-primary/12 text-primary">
-                  <action.icon aria-hidden="true" className="size-4" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium text-foreground">{action.label}</span>
-                  <span className="block text-xs text-muted-foreground">{action.description}</span>
-                </span>
+                <Plus className={cn('size-5 transition-transform duration-200', showActions && 'rotate-45')} />
               </button>
-            ))}
-          </PopoverContent>
-        </Popover>
+            </PopoverTrigger>
+            <PopoverContent side="top" align="start" sideOffset={10} className="w-72 rounded-2xl p-1.5">
+              <div role="menu" aria-label="Message types">
+                {actions.map((action) => (
+                  <button
+                    key={action.label}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setShowActions(false);
+                      action.onSelect();
+                    }}
+                    className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-[var(--chat-hover)] focus-visible:bg-[var(--chat-hover)] focus-visible:outline-none"
+                  >
+                    <span className="flex size-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
+                      <action.icon aria-hidden="true" className="size-[18px]" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-foreground">{action.label}</span>
+                      <span className="block text-xs leading-4 text-muted-foreground">{action.description}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
 
-        <div className="relative min-w-0 flex-1">
           <textarea
             ref={textareaRef}
             value={text}
             onChange={(event) => handleChange(event.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={file ? 'Add a caption' : 'Type a message'}
+            placeholder={file ? 'Add a caption' : 'Message'}
             disabled={disabled}
             rows={1}
             autoComplete="off"
             enterKeyHint="send"
             aria-label="Message"
             aria-invalid={overLimit || undefined}
-            className={cn(
-              'block max-h-40 min-h-11 w-full resize-none rounded-2xl border border-[var(--chat-border-strong)] bg-[var(--chat-input)] px-4 py-2.5 text-base leading-6 outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground focus-visible:border-primary/60 focus-visible:ring-[3px] focus-visible:ring-primary/20 disabled:opacity-50 md:min-h-10 md:py-2 md:text-sm md:leading-6',
-              overLimit && 'border-red-500/70 focus-visible:border-red-500/70 focus-visible:ring-red-500/20',
-            )}
+            className="block max-h-40 min-h-11 min-w-0 flex-1 resize-none bg-transparent px-1 py-[0.6875rem] text-base leading-[1.375rem] outline-none placeholder:text-muted-foreground disabled:opacity-50 md:text-[15px]"
           />
-          {text.length > maxLength * 0.9 && (
-            <span
-              aria-live="polite"
-              className={cn(
-                'pointer-events-none absolute -top-5 right-2 text-[11px] tabular-nums',
-                overLimit ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground',
-              )}
-            >
-              {text.length}/{maxLength}
-            </span>
-          )}
+
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={disabled}
+            className="m-1 flex size-9 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-[var(--chat-hover)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
+            aria-label="Attach file"
+            title="Attach file (or paste / drop it)"
+          >
+            <Paperclip className="size-5" />
+          </button>
         </div>
 
-        <Button
-          type="submit"
-          disabled={!canSend}
-          size="icon"
-          className="size-11 rounded-full bg-primary hover:bg-[var(--primary-hover)] md:size-10"
-          aria-label="Send message"
-          title="Send (Enter) · New line (Shift+Enter)"
-        >
-          <Send className="h-5 w-5" />
-        </Button>
-      </form>
-    </>
+        {text.length > maxLength * 0.9 && (
+          <p
+            aria-live="polite"
+            className={cn(
+              'px-4 pb-1.5 text-right text-[11px] tabular-nums',
+              overLimit ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground',
+            )}
+          >
+            {text.length}/{maxLength}
+          </p>
+        )}
+      </div>
+
+      <button
+        type="submit"
+        disabled={!canSend}
+        className={cn(
+          'flex size-11 flex-shrink-0 items-center justify-center rounded-full shadow-sm transition-[background-color,transform,box-shadow,color] duration-200 ease-out focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/25 active:scale-90',
+          canSend
+            ? 'bg-primary text-primary-foreground shadow-primary/30 hover:bg-[var(--primary-hover)] hover:shadow-md'
+            : 'bg-[var(--chat-hover)] text-muted-foreground shadow-none',
+        )}
+        aria-label="Send message"
+        title="Send (Enter) · New line (Shift+Enter)"
+      >
+        <SendHorizontal className={cn('size-5 transition-transform duration-200', canSend && 'translate-x-px')} />
+      </button>
+    </form>
   );
 });

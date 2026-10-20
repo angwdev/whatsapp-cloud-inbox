@@ -30,6 +30,7 @@ import { LocationRequestDialog } from "@/components/location-request-dialog";
 import { FlowMessageDialog } from "@/components/flow-message-dialog";
 import { Composer, type ComposerHandle, type ComposerSendInput } from "@/components/chat/composer";
 import { MessageRow, type MessageRowHandlers } from "@/components/chat/message-row";
+import { EmojiPickerSheet } from "@/components/reaction-picker";
 import {
   CUSTOMER_SERVICE_WINDOW_MS,
   extractSentMessageId,
@@ -157,6 +158,7 @@ export function MessageView({
   const [replyingToMessage, setReplyingToMessage] = useState<Message | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
+  const [emojiSheetMessage, setEmojiSheetMessage] = useState<Message | null>(null);
   const [pendingSends, setPendingSends] = useState<PendingSend[]>([]);
   const [windowClosedAt, setWindowClosedAt] = useState<number | null>(null);
   const [loadingOlderFor, setLoadingOlderFor] = useState<string | null>(null);
@@ -651,6 +653,7 @@ export function MessageView({
         }
       },
       onPickerChange: setReactionPickerMessageId,
+      onOpenEmojiSheet: setEmojiSheetMessage,
       onJumpTo: (messageId) => latestRef.current.scrollToMessage(messageId),
       onRetry: (localId) => {
         const pending = latestRef.current.pendingSends.find((send) => send.id === localId);
@@ -902,8 +905,15 @@ export function MessageView({
 
                     {(!previous || !isSameDay(previous.createdAt, message.createdAt)) && (
                       <div className="my-4 flex justify-center">
-                        <Badge variant="secondary" className="shadow-sm">{formatDateDivider(message.createdAt)}</Badge>
+                        <Badge variant="secondary" className="rounded-full border border-[var(--chat-border)] bg-[var(--chat-surface)]/90 px-3 py-1 text-[11px] font-medium text-muted-foreground shadow-sm backdrop-blur">
+                          {formatDateDivider(message.createdAt)}
+                        </Badge>
                       </div>
+                    )}
+
+                    {reactionPickerMessageId === message.id && (
+                      // Touch screens dim the thread behind the long-press menu; the message stays above it.
+                      <div aria-hidden="true" className="pointer-fine:hidden fixed inset-0 z-[1] bg-black/35 backdrop-blur-[1.5px] animate-in fade-in-0 duration-200" />
                     )}
 
                     <MessageRow
@@ -913,7 +923,7 @@ export function MessageView({
                       phoneNumber={phoneNumber}
                       fallbackPhoneNumberId={phoneNumberId}
                       isHighlighted={highlightedMessageId === message.id}
-                      isPickerOpen={canReact && reactionPickerMessageId === message.id}
+                      isPickerOpen={reactionPickerMessageId === message.id}
                       canReply={canSendRegularMessage}
                       canReact={canReact}
                       answeredByMessageId={answeredLocationRequests.get(message.id)}
@@ -955,7 +965,7 @@ export function MessageView({
         )}
       </div>
 
-      <div className="border-t border-[var(--chat-border-strong)] bg-[var(--chat-toolbar)] pb-safe-0">
+      <div className="border-t border-[var(--chat-border)] bg-[var(--chat-toolbar)]/90 pb-safe-0 backdrop-blur-md supports-[backdrop-filter]:bg-[var(--chat-toolbar)]/75">
         {canSendRegularMessage ? (
           <Composer
             ref={composerRef}
@@ -1017,6 +1027,15 @@ export function MessageView({
         phoneNumber={phoneNumber}
         phoneNumberId={phoneNumberId}
         onMessageSent={handleSessionMessageSent}
+      />
+      <EmojiPickerSheet
+        open={emojiSheetMessage !== null}
+        onOpenChange={(open) => {
+          if (!open) setEmojiSheetMessage(null);
+        }}
+        onSelect={(emoji) => {
+          if (emojiSheetMessage) void handlers.onReact(emojiSheetMessage, emoji);
+        }}
       />
       <FlowMessageDialog
         open={showFlowDialog}

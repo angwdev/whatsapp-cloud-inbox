@@ -21,6 +21,8 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "emojibase-data": "^16.0.3",
+    "frimousse": "^0.4.0",
     "lucide-react": "^0.545.0",
     "next": "^16.4.2",
     "next-auth": "5.0.0-beta.32",
