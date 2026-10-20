@@ -12,6 +12,16 @@ type MessageTypeData = {
   filename?: string;
   mimeType?: string;
   messageId?: string;
+  emoji?: string;
+  raw: Record<string, unknown>;
+};
+
+type LocationData = {
+  latitude: number;
+  longitude: number;
+  name?: string;
+  address?: string;
+  url?: string;
 };
 
 type WithOptionalTimestamp = {
@@ -59,11 +69,14 @@ function extractMessageTypeData(value: KapsoMessageExtensions['messageTypeData']
     return undefined;
   }
 
-  const { filename, mimeType, messageId } = value as MessageTypeData;
+  const raw = value as Record<string, unknown>;
+  const { filename, mimeType, messageId, emoji } = raw;
   return {
     filename: typeof filename === 'string' ? filename : undefined,
     mimeType: typeof mimeType === 'string' ? mimeType : undefined,
-    messageId: typeof messageId === 'string' ? messageId : undefined
+    messageId: typeof messageId === 'string' ? messageId : undefined,
+    emoji: typeof emoji === 'string' ? emoji : undefined,
+    raw
   };
 }
 
@@ -86,6 +99,49 @@ function readString(value: Record<string, unknown> | undefined, ...keys: string[
   }
 
   return undefined;
+}
+
+function readCoordinate(value: unknown, limit: number): number | undefined {
+  const coordinate = typeof value === 'string' && value.trim() ? Number(value) : value;
+  return typeof coordinate === 'number' && Number.isFinite(coordinate) && Math.abs(coordinate) <= limit
+    ? coordinate
+    : undefined;
+}
+
+function extractLocation(
+  location: MetaMessage['location'],
+  messageTypeData: MessageTypeData | undefined
+): LocationData | undefined {
+  // Kapso may keep the shared location in message_type_data instead of the Meta field.
+  const source = (location ?? messageTypeData?.raw) as Record<string, unknown> | undefined;
+  if (!source) return undefined;
+
+  const latitude = readCoordinate(source.latitude, 90);
+  const longitude = readCoordinate(source.longitude, 180);
+  if (latitude === undefined || longitude === undefined) return undefined;
+
+  const url = readString(source, 'url');
+  return {
+    latitude,
+    longitude,
+    name: readString(source, 'name'),
+    address: readString(source, 'address'),
+    url: url && /^https?:\/\//i.test(url) ? url : undefined
+  };
+}
+
+function extractInteractive(
+  interactive: MetaMessage['interactive'],
+  messageTypeData: MessageTypeData | undefined
+): { type?: string; bodyText?: string } {
+  const source = interactive && typeof interactive === 'object' ? interactive : messageTypeData?.raw;
+  if (!source) return {};
+
+  const body = source.body as Record<string, unknown> | undefined;
+  return {
+    type: readString(source, 'type', 'interactiveType', 'interactive_type'),
+    bodyText: body && typeof body === 'object' ? readString(body, 'text') : undefined
+  };
 }
 
 function extractContextMessageId(
@@ -177,7 +233,7 @@ export async function GET(
 
     // Transform messages to match frontend expectations
     const transformedData = response.data.map((msg: MetaMessage) => {
-      const { image, video, audio, document, sticker, text, reaction, kapso } = msg;
+      const { image, video, audio, document, sticker, text, reaction, location, interactive, kapso } = msg;
       const kapsoExtensions = kapso as KapsoMessageExtensions | undefined;
       const messageTypeData = extractMessageTypeData(kapsoExtensions?.messageTypeData);
       const kapsoMediaData = extractMediaData(kapsoExtensions?.mediaData);
@@ -216,9 +272,14 @@ export async function GET(
 
       const kapsoContent = normaliseKapsoContent(kapsoExtensions?.content);
       const textBody = typeof text?.body === 'string' ? text.body : undefined;
-      const reactionEmoji = typeof reaction?.emoji === 'string' ? reaction.emoji : undefined;
+      // A reaction without an emoji is the contact (or you) removing it.
+      const reactionEmoji = msg.type === 'reaction'
+        ? (typeof reaction?.emoji === 'string' ? reaction.emoji : messageTypeData?.emoji ?? '')
+        : undefined;
+      const locationData = msg.type === 'location' ? extractLocation(location, messageTypeData) : undefined;
+      const interactiveData = msg.type === 'interactive' ? extractInteractive(interactive, messageTypeData) : {};
       const content = normalizeMessageContent({
-        content: kapsoContent ?? textBody ?? reactionEmoji,
+        content: kapsoContent ?? textBody ?? interactiveData.bodyText ?? reactionEmoji,
         messageType: msg.type,
         mediaUrl
       });
@@ -250,6 +311,8 @@ export async function GET(
         mimeType: messageTypeData?.mimeType ?? kapsoMediaData.contentType,
         messageType: msg.type,
         caption: fallbackCaption,
+        location: locationData,
+        interactiveType: interactiveData.type,
         metadata: {
           mediaId
         }

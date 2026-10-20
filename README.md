@@ -11,6 +11,8 @@ A WhatsApp Web-style inbox built with Next.js 16 for the WhatsApp Cloud API. Sen
 - **Real-time messaging** - Auto-polling keeps conversations updated
 - **Template messages** - Full support for WhatsApp templates with parameters (header, body, buttons)
 - **Interactive messages** - Send button messages with up to 3 custom actions
+- **Location requests** - Ask a contact to share their location and see the reply as a map card
+- **Reactions** - React to customer messages with any emoji and see the contact's reactions on yours
 - **Media support** - Send images, videos, documents, and audio
 - **24-hour window enforcement** - Automatically restricts messaging outside WhatsApp's window
 - **Failed message indicators** - Visual feedback for delivery failures
@@ -134,6 +136,22 @@ Create button messages without templates:
 - Each button gets a unique ID and title (max 20 chars)
 - Ideal for quick replies, confirmations, menu selections
 
+### Location Requests
+
+Ask the contact to share where they are ([Cloud API docs](https://developers.facebook.com/documentation/business-messaging/whatsapp/messages/location-request-messages)):
+- **Body text (required, max 1024 chars)** with suggested presets and a live preview
+- The contact sees a **Send location** button; the request bubble shows whether they answered and jumps to the reply
+- Shared locations render as a map card (OpenStreetMap tiles) with name, address, coordinates, directions, and copy
+
+### Reactions
+
+React to messages the contact sent ([Cloud API docs](https://developers.facebook.com/documentation/business-messaging/whatsapp/messages/reaction-messages)):
+- **Desktop** - hover a message and click the smiley; **touch** - long-press the message
+- Six quick reactions plus a wider emoji grid; picking your current reaction again removes it
+- Reactions show up immediately and roll back if WhatsApp rejects them
+- Both sides' reactions appear as a chip under the message; removals by the contact clear it
+- Only available inside the 24-hour window and for messages up to 30 days old, as the Cloud API requires
+
 ### 24-Hour Window
 
 Automatically enforces WhatsApp's messaging policy:
@@ -147,6 +165,8 @@ Automatically enforces WhatsApp's messaging policy:
 - ✅ Images, videos, audio, documents
 - ✅ Template messages (with all parameter types)
 - ✅ Interactive button messages
+- ✅ Location request messages and shared locations
+- ✅ Reactions (send, change, remove, and receive)
 - ✅ Failed message indicators
 
 ## Contributing

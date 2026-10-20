@@ -22,19 +22,30 @@ import {
   ArrowLeft,
   Check,
   Reply,
+  Smile,
+  MapPin,
+  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   CONVERSATIONS_QUERY_KEY,
+  REACTION_MAX_AGE_MS,
   type Conversation,
   type Message,
+  type MessageReaction,
   conversationMessagesQueryKey,
+  describeLocation,
   fetchConversationMessages,
+  isLocationRequestMessage,
   normalizeMessages,
   phoneThreadMessagesQueryKey,
   shortConversationId,
 } from "@/lib/inbox-data";
 import { MediaMessage } from "@/components/media-message";
+import { LocationMessage, LocationRequestFooter } from "@/components/location-message";
+import { LocationRequestDialog } from "@/components/location-request-dialog";
+import { ReactionChips, ReactionPickerContent } from "@/components/reaction-picker";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { TemplateSelectorDialog } from "@/components/template-selector-dialog";
 import { InteractiveMessageDialog } from "@/components/interactive-message-dialog";
 import { Button } from "@/components/ui/button";
@@ -181,6 +192,11 @@ const MESSAGE_SKELETON_WIDTHS = [280, 180, 320, 210, 260, 170];
 const LOCAL_REPLY_CONTEXT_STORAGE_KEY = "whatsapp-cloud-inbox-reply-contexts";
 const LOCAL_REPLY_CONTEXT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_LOCAL_REPLY_CONTEXTS = 200;
+const LOCAL_REACTIONS_STORAGE_KEY = "whatsapp-cloud-inbox-reactions";
+const MAX_LOCAL_REACTIONS = 300;
+const LONG_PRESS_DELAY_MS = 450;
+const LONG_PRESS_MOVE_TOLERANCE_PX = 10;
+const NOTICE_DURATION_MS = 4_000;
 
 type RepliedToMessage = NonNullable<Message["repliedTo"]>;
 
@@ -191,6 +207,18 @@ type LocalReplyContext = {
 };
 
 type LocalReplyContexts = Record<string, LocalReplyContext>;
+
+/**
+ * Your reaction as sent from this browser. The message history may lag behind
+ * or never list outbound reactions, so this stays until the history agrees.
+ */
+type LocalReaction = {
+  emoji: string;
+  createdAt: number;
+  pending: boolean;
+};
+
+type LocalReactions = Record<string, LocalReaction>;
 
 type SendMessageResult = {
   messages?: Array<{ id?: string }>;
@@ -217,6 +245,9 @@ function isGeneratedAttachmentDisplayContent(content: string): boolean {
 }
 
 function getDisplayMessageContent(message: Message): string | null {
+  // The location card shows everything the generated text would.
+  if (message.location) return null;
+
   if (!message.content || message.content === "[Image attached]") {
     return null;
   }
@@ -239,6 +270,8 @@ function getDisplayMessageContent(message: Message): string | null {
 }
 
 function getReplyPreviewContent(message: Message): string {
+  if (message.location) return `📍 ${describeLocation(message.location)}`;
+
   const content = getDisplayMessageContent(message) || message.caption || message.filename || '';
   const trimmedContent = content.trim();
 
@@ -287,6 +320,65 @@ function pruneLocalReplyContexts(contexts: LocalReplyContexts): LocalReplyContex
   return Object.fromEntries(entries);
 }
 
+function pruneLocalReactions(reactions: LocalReactions): LocalReactions {
+  const now = Date.now();
+  const entries = Object.entries(reactions)
+    .filter(([, reaction]) => (
+      reaction &&
+      typeof reaction.emoji === "string" &&
+      typeof reaction.createdAt === "number" &&
+      now - reaction.createdAt < REACTION_MAX_AGE_MS
+    ))
+    .sort(([, a], [, b]) => b.createdAt - a.createdAt)
+    .slice(0, MAX_LOCAL_REACTIONS);
+
+  return Object.fromEntries(entries);
+}
+
+function getOutboundReaction(message: Message): MessageReaction | undefined {
+  return message.reactions?.find((reaction) => reaction.direction === "outbound");
+}
+
+/** True once the message history shows the local reaction, or a newer one. */
+function isLocalReactionSettled(localReaction: LocalReaction, serverReaction?: MessageReaction): boolean {
+  if (localReaction.pending) return false;
+  if ((serverReaction?.emoji ?? "") === localReaction.emoji) return true;
+
+  return Boolean(serverReaction && Date.parse(serverReaction.createdAt) > localReaction.createdAt + 5_000);
+}
+
+function applyLocalReactions(messages: Message[], localReactions: LocalReactions): Message[] {
+  if (Object.keys(localReactions).length === 0) return messages;
+
+  return messages.map((message) => {
+    const localReaction = localReactions[message.id];
+    if (!localReaction || isLocalReactionSettled(localReaction, getOutboundReaction(message))) {
+      return message;
+    }
+
+    const contactReactions = (message.reactions ?? []).filter((reaction) => reaction.direction !== "outbound");
+    return {
+      ...message,
+      reactions: localReaction.emoji
+        ? [
+            ...contactReactions,
+            {
+              emoji: localReaction.emoji,
+              direction: "outbound" as const,
+              createdAt: new Date(localReaction.createdAt).toISOString(),
+              pending: localReaction.pending,
+            },
+          ]
+        : contactReactions,
+    };
+  });
+}
+
+function isOlderThan(timestamp: string, maxAgeMs: number): boolean {
+  const time = Date.parse(timestamp);
+  return !Number.isFinite(time) || Date.now() - time >= maxAgeMs;
+}
+
 type Props = {
   conversationId?: string;
   conversations?: Conversation[];
@@ -322,6 +414,14 @@ export function MessageView({
   const [canSendRegularMessage, setCanSendRegularMessage] = useState(true);
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
   const [showInteractiveDialog, setShowInteractiveDialog] = useState(false);
+  const [showLocationRequestDialog, setShowLocationRequestDialog] = useState(false);
+  const [showComposerActions, setShowComposerActions] = useState(false);
+  const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
+  const [localReactions, setLocalReactions] = useState<LocalReactions>({});
+  const [notice, setNotice] = useState<string | null>(null);
+  const localReactionsRef = useRef<LocalReactions>({});
+  const longPressRef = useRef<{ timer: number; x: number; y: number } | null>(null);
+  const noticeTimeoutRef = useRef<number | null>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [replyingToMessage, setReplyingToMessage] = useState<Message | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
@@ -428,6 +528,112 @@ export function MessageView({
     setReplyingToMessage(null);
   }, []);
 
+  const showNotice = useCallback((text: string) => {
+    setNotice(text);
+    if (noticeTimeoutRef.current !== null) {
+      window.clearTimeout(noticeTimeoutRef.current);
+    }
+    noticeTimeoutRef.current = window.setTimeout(() => {
+      setNotice(null);
+      noticeTimeoutRef.current = null;
+    }, NOTICE_DURATION_MS);
+  }, []);
+
+  const updateLocalReactions = useCallback((update: (reactions: LocalReactions) => LocalReactions) => {
+    const nextReactions = pruneLocalReactions(update(localReactionsRef.current));
+    localReactionsRef.current = nextReactions;
+    setLocalReactions(nextReactions);
+
+    try {
+      window.localStorage.setItem(LOCAL_REACTIONS_STORAGE_KEY, JSON.stringify(nextReactions));
+    } catch {
+      // Keeping the in-memory map is enough for the current session.
+    }
+  }, []);
+
+  const handleReact = useCallback(async (message: Message, emoji: string) => {
+    setReactionPickerMessageId(null);
+    if (!phoneNumber) return;
+
+    const previousReaction = localReactionsRef.current[message.id];
+    const optimisticReaction: LocalReaction = { emoji, createdAt: Date.now(), pending: true };
+    const isCurrentAttempt = (reactions: LocalReactions) => reactions[message.id] === optimisticReaction;
+
+    updateLocalReactions((reactions) => ({ ...reactions, [message.id]: optimisticReaction }));
+
+    try {
+      const response = await fetch("/api/messages/reaction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: phoneNumber,
+          phoneNumberId: message.phoneNumberId || phoneNumberId,
+          messageId: message.id,
+          emoji,
+        }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to send reaction");
+      }
+
+      updateLocalReactions((reactions) => (
+        isCurrentAttempt(reactions)
+          ? { ...reactions, [message.id]: { ...optimisticReaction, pending: false } }
+          : reactions
+      ));
+    } catch (error) {
+      console.error("Error sending reaction:", error);
+      // Roll back only if nothing newer replaced this attempt meanwhile.
+      updateLocalReactions((reactions) => {
+        if (!isCurrentAttempt(reactions)) return reactions;
+        const nextReactions = { ...reactions };
+        if (previousReaction) {
+          nextReactions[message.id] = previousReaction;
+        } else {
+          delete nextReactions[message.id];
+        }
+        return nextReactions;
+      });
+      showNotice(emoji ? "Couldn't send the reaction. Try again." : "Couldn't remove the reaction. Try again.");
+    }
+  }, [phoneNumber, phoneNumberId, showNotice, updateLocalReactions]);
+
+  const cancelLongPress = useCallback(() => {
+    if (!longPressRef.current) return;
+    window.clearTimeout(longPressRef.current.timer);
+    longPressRef.current = null;
+  }, []);
+
+  const startLongPress = useCallback((event: React.PointerEvent, messageId: string) => {
+    if (event.pointerType !== "touch") return;
+
+    cancelLongPress();
+    longPressRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      timer: window.setTimeout(() => {
+        longPressRef.current = null;
+        window.getSelection()?.removeAllRanges();
+        navigator.vibrate?.(10);
+        setReactionPickerMessageId(messageId);
+      }, LONG_PRESS_DELAY_MS),
+    };
+  }, [cancelLongPress]);
+
+  const trackLongPressMove = useCallback((event: React.PointerEvent) => {
+    const longPress = longPressRef.current;
+    if (!longPress) return;
+
+    if (
+      Math.abs(event.clientX - longPress.x) > LONG_PRESS_MOVE_TOLERANCE_PX ||
+      Math.abs(event.clientY - longPress.y) > LONG_PRESS_MOVE_TOLERANCE_PX
+    ) {
+      cancelLongPress();
+    }
+  }, [cancelLongPress]);
+
   const persistLocalReplyContexts = useCallback((contexts: LocalReplyContexts) => {
     const prunedContexts = pruneLocalReplyContexts(contexts);
     localReplyContextsRef.current = prunedContexts;
@@ -511,6 +717,39 @@ export function MessageView({
     refetchOnMount: false,
   });
 
+  const displayMessages = useMemo(
+    () => applyLocalReactions(messages, localReactions),
+    [localReactions, messages],
+  );
+
+  const answeredLocationRequests = useMemo(() => {
+    const answers = new Map<string, string>();
+    displayMessages.forEach((message) => {
+      if (message.location && message.direction === "inbound" && message.contextMessageId) {
+        answers.set(message.contextMessageId, message.id);
+      }
+    });
+    return answers;
+  }, [displayMessages]);
+
+  // Forget local reactions once the message history reflects them.
+  useEffect(() => {
+    const settledMessageIds = messages
+      .filter((message) => {
+        const localReaction = localReactionsRef.current[message.id];
+        return localReaction && isLocalReactionSettled(localReaction, getOutboundReaction(message));
+      })
+      .map((message) => message.id);
+
+    if (settledMessageIds.length === 0) return;
+
+    updateLocalReactions((reactions) => {
+      const nextReactions = { ...reactions };
+      settledMessageIds.forEach((messageId) => delete nextReactions[messageId]);
+      return nextReactions;
+    });
+  }, [messages, updateLocalReactions]);
+
   useEffect(() => {
     try {
       const storedContexts = window.localStorage.getItem(LOCAL_REPLY_CONTEXT_STORAGE_KEY);
@@ -524,6 +763,26 @@ export function MessageView({
       localReplyContextsRef.current = {};
     }
   }, [persistLocalReplyContexts]);
+
+  useEffect(() => {
+    try {
+      const storedReactions = window.localStorage.getItem(LOCAL_REACTIONS_STORAGE_KEY);
+      if (!storedReactions) return;
+
+      const parsedReactions = JSON.parse(storedReactions);
+      if (parsedReactions && typeof parsedReactions === "object" && !Array.isArray(parsedReactions)) {
+        // A reload interrupts any request that was still in flight.
+        updateLocalReactions(() => Object.fromEntries(
+          Object.entries(parsedReactions as LocalReactions).map(([messageId, reaction]) => [
+            messageId,
+            { ...reaction, pending: false },
+          ]),
+        ));
+      }
+    } catch {
+      localReactionsRef.current = {};
+    }
+  }, [updateLocalReactions]);
 
   useEffect(() => {
     const currentMessages = queryClient.getQueryData<Message[]>(threadMessagesQueryKey);
@@ -630,11 +889,13 @@ export function MessageView({
 
   useEffect(() => {
     setReplyingToMessage(null);
+    setReactionPickerMessageId(null);
   }, [threadKey]);
 
   useEffect(() => {
     if (!canSendRegularMessage) {
       setReplyingToMessage(null);
+      setReactionPickerMessageId(null);
     }
   }, [canSendRegularMessage]);
 
@@ -643,8 +904,12 @@ export function MessageView({
       if (highlightTimeoutRef.current !== null) {
         window.clearTimeout(highlightTimeoutRef.current);
       }
+      if (noticeTimeoutRef.current !== null) {
+        window.clearTimeout(noticeTimeoutRef.current);
+      }
+      cancelLongPress();
     };
-  }, []);
+  }, [cancelLongPress]);
 
   // Track if user is near bottom of scroll
   useEffect(() => {
@@ -758,6 +1023,19 @@ export function MessageView({
       setSending(false);
     }
   };
+
+  const handleSessionMessageSent = async () => {
+    await queryClient.invalidateQueries({
+      queryKey: CONVERSATIONS_QUERY_KEY,
+    });
+    await refreshCurrentThread();
+  };
+
+  const canReactTo = (message: Message) => (
+    canSendRegularMessage &&
+    message.direction === "inbound" &&
+    !isOlderThan(message.createdAt, REACTION_MAX_AGE_MS)
+  );
 
   const handleTemplateSent = async () => {
     await refreshCurrentThread();
@@ -904,18 +1182,19 @@ export function MessageView({
         </div>
       </div>
 
+      <div className="relative flex min-h-0 flex-1 flex-col">
       <ScrollArea
         ref={messagesContainerRef}
         className="h-0 flex-1 overscroll-contain px-4 py-3 sm:p-4 lg:p-6"
       >
         <div className="mx-auto w-full max-w-[900px]">
-          {messages.length === 0 ? (
+          {displayMessages.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               No messages yet
             </p>
           ) : (
-            messages.map((message, index) => {
-              const prevMessage = index > 0 ? messages[index - 1] : null;
+            displayMessages.map((message, index) => {
+              const prevMessage = index > 0 ? displayMessages[index - 1] : null;
               const showDateDivider = shouldShowDateDivider(
                 message,
                 prevMessage,
@@ -926,6 +1205,12 @@ export function MessageView({
               );
               const displayMessageContent = getDisplayMessageContent(message);
               const isHighlighted = highlightedMessageId === message.id;
+              const isOutbound = message.direction === "outbound";
+              const isLocationRequest = isLocationRequestMessage(message);
+              const canReact = canReactTo(message);
+              const isPickerOpen = canReact && reactionPickerMessageId === message.id;
+              const outboundReaction = getOutboundReaction(message);
+              const contactLabel = contactName || displayPhoneNumber || "Contact";
 
               return (
                 <div
@@ -953,179 +1238,249 @@ export function MessageView({
                     </div>
                   )}
 
-                  <div
-                    className={cn(
-                      "group flex mb-2 items-start gap-1.5 rounded-lg px-1 py-0.5 transition-colors",
-                      message.direction === "outbound"
-                        ? "justify-end"
-                        : "justify-start",
-                      isHighlighted && "bg-primary/10",
-                    )}
+                  <Popover
+                    open={isPickerOpen}
+                    onOpenChange={(open) => setReactionPickerMessageId(open ? message.id : null)}
                   >
-                    {message.direction === "outbound" && canSendRegularMessage && (
-                      <Button
-                        type="button"
-                        onClick={() => handleReplyToMessage(message)}
-                        variant="ghost"
-                        size="icon"
-                        className="mt-1 size-9 flex-shrink-0 text-muted-foreground opacity-100 hover:bg-[var(--chat-hover)] focus-visible:opacity-100 pointer-fine:size-7 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
-                        aria-label="Reply to message"
-                        title="Reply"
-                      >
-                        <Reply className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
                     <div
                       className={cn(
-                        "relative max-w-[min(88%,34rem)] rounded-lg px-3 py-2 shadow-sm transition-shadow sm:max-w-[min(78%,38rem)] lg:max-w-[min(70%,42rem)]",
-                        message.direction === "outbound"
-                          ? "bg-[var(--chat-bubble-outgoing)] text-foreground rounded-br-none"
-                          : "bg-[var(--chat-bubble-incoming)] text-foreground rounded-bl-none",
-                        isHighlighted && "ring-2 ring-primary/35",
+                        "group mb-2 flex items-start gap-1.5 rounded-lg px-1 py-0.5 transition-colors",
+                        isOutbound ? "justify-end" : "justify-start",
+                        isHighlighted && "bg-primary/10",
+                        isPickerOpen && "bg-[var(--chat-hover)]/60",
                       )}
                     >
-                      {message.repliedTo && (
-                        <button
+                      {isOutbound && canSendRegularMessage && (
+                        <Button
                           type="button"
-                          onClick={() => scrollToMessage(message.repliedTo!.id)}
-                          className="mb-2 block w-full rounded border-l-2 border-primary/60 bg-background/45 px-2 py-1.5 text-left hover:bg-background/70"
+                          onClick={() => handleReplyToMessage(message)}
+                          variant="ghost"
+                          size="icon"
+                          className="mt-1 size-9 flex-shrink-0 text-muted-foreground opacity-100 hover:bg-[var(--chat-hover)] focus-visible:opacity-100 pointer-fine:size-7 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
+                          aria-label="Reply to message"
+                          title="Reply"
                         >
-                          <span className="flex min-w-0 items-center gap-1 text-[11px] font-medium text-primary">
-                            <Reply className="h-3 w-3 flex-shrink-0" />
-                            <span className="truncate">
-                              {message.repliedTo.senderName ||
-                                getMessageSenderLabel(message.repliedTo, contactName, phoneNumber)}
-                            </span>
-                          </span>
-                          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                            {message.repliedTo.content}
-                          </span>
-                        </button>
+                          <Reply className="h-3.5 w-3.5" />
+                        </Button>
                       )}
-
-                      {message.hasMedia && message.mediaData?.url ? (
-                        <div className="mb-2">
-                          {message.messageType === "sticker" ? (
-                            <img
-                              src={message.mediaData.url}
-                              alt="Sticker"
-                              className="h-auto max-h-[150px] max-w-[150px]"
-                            />
-                          ) : message.mediaData.contentType?.startsWith(
-                              "image/",
-                            ) || message.messageType === "image" ? (
-                            <img
-                              src={message.mediaData.url}
-                              alt="Media"
-                              className="h-auto max-h-96 max-w-full rounded outline outline-1 [outline-color:var(--chat-media-outline)]"
-                            />
-                          ) : message.mediaData.contentType?.startsWith(
-                              "video/",
-                            ) || message.messageType === "video" ? (
-                            <video
-                              src={message.mediaData.url}
-                              controls
-                              className="h-auto max-h-96 max-w-full rounded outline outline-1 [outline-color:var(--chat-media-outline)]"
-                            />
-                          ) : message.mediaData.contentType?.startsWith(
-                              "audio/",
-                            ) || message.messageType === "audio" ? (
-                            <audio
-                              src={message.mediaData.url}
-                              controls
-                              className="w-full"
-                            />
-                          ) : (
-                            <a
-                              href={message.mediaData.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={cn(
-                                "flex min-w-0 items-center gap-2 text-sm underline hover:opacity-80",
-                                message.direction === "outbound"
-                                  ? "text-primary"
-                                  : "text-primary",
-                              )}
-                            >
-                              <Paperclip className="h-4 w-4 flex-shrink-0" />
-                              <span className="truncate">
-                                {message.mediaData.filename ||
-                                  message.filename ||
-                                  "Download file"}
-                              </span>
-                            </a>
-                          )}
-                        </div>
-                      ) : message.metadata?.mediaId && message.messageType ? (
-                        <div className="mb-2">
-                          <MediaMessage
-                            mediaId={message.metadata.mediaId}
-                            phoneNumberId={message.phoneNumberId || phoneNumberId}
-                            messageType={message.messageType}
-                            caption={message.caption}
-                            filename={message.filename}
-                            isOutbound={message.direction === "outbound"}
-                          />
-                        </div>
-                      ) : null}
-
-                      {message.caption && (
-                        <p className="text-sm break-words whitespace-pre-wrap mb-1">
-                          {message.caption}
-                        </p>
-                      )}
-
-                      {displayMessageContent && (
-                        <p className="text-sm break-words whitespace-pre-wrap">
-                          {displayMessageContent}
-                        </p>
-                      )}
-
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                        <span className="text-[11px] tabular-nums text-muted-foreground">
-                          {formatMessageTime(message.createdAt)}
-                        </span>
-
-                        {message.direction === "outbound" && message.status && (
-                          <>
-                            {message.status === "failed" ? (
-                              <XCircle className="h-3.5 w-3.5 text-red-500" />
-                            ) : (
-                              <MessageStatusChecks status={message.status} />
-                            )}
-                          </>
+                      <div
+                        className={cn(
+                          "flex min-w-0 max-w-[min(88%,34rem)] flex-col sm:max-w-[min(78%,38rem)] lg:max-w-[min(70%,42rem)]",
+                          isOutbound ? "items-end" : "items-start",
                         )}
+                      >
+                        <PopoverAnchor asChild>
+                          <div
+                            onPointerDown={canReact ? (event) => startLongPress(event, message.id) : undefined}
+                            onPointerMove={canReact ? trackLongPressMove : undefined}
+                            onPointerUp={canReact ? cancelLongPress : undefined}
+                            onPointerCancel={canReact ? cancelLongPress : undefined}
+                            onPointerLeave={canReact ? cancelLongPress : undefined}
+                            onContextMenu={canReact ? (event) => {
+                              // Long-press opens the reaction picker on touch screens instead of the system menu.
+                              if (window.matchMedia("(pointer: coarse)").matches) event.preventDefault();
+                            } : undefined}
+                            className={cn(
+                              "relative max-w-full rounded-lg px-3 py-2 shadow-sm transition-[box-shadow,transform] duration-150",
+                              isOutbound
+                                ? "bg-[var(--chat-bubble-outgoing)] text-foreground rounded-br-none"
+                                : "bg-[var(--chat-bubble-incoming)] text-foreground rounded-bl-none",
+                              canReact && "[-webkit-touch-callout:none]",
+                              (isLocationRequest || message.location) && "overflow-hidden",
+                              isHighlighted && "ring-2 ring-primary/35",
+                              isPickerOpen && "ring-2 ring-primary/25 pointer-coarse:scale-[0.98]",
+                            )}
+                          >
+                            {message.repliedTo && (
+                              <button
+                                type="button"
+                                onClick={() => scrollToMessage(message.repliedTo!.id)}
+                                className="mb-2 block w-full rounded border-l-2 border-primary/60 bg-background/45 px-2 py-1.5 text-left hover:bg-background/70"
+                              >
+                                <span className="flex min-w-0 items-center gap-1 text-[11px] font-medium text-primary">
+                                  <Reply className="h-3 w-3 flex-shrink-0" />
+                                  <span className="truncate">
+                                    {message.repliedTo.senderName ||
+                                      getMessageSenderLabel(message.repliedTo, contactName, phoneNumber)}
+                                  </span>
+                                </span>
+                                <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                                  {message.repliedTo.content}
+                                </span>
+                              </button>
+                            )}
+
+                            {isLocationRequest && (
+                              <p className="mb-1 flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-primary">
+                                <MapPin aria-hidden="true" className="size-3" />
+                                Location request
+                              </p>
+                            )}
+
+                            {message.location && <LocationMessage location={message.location} />}
+
+                          {message.hasMedia && message.mediaData?.url ? (
+                            <div className="mb-2">
+                              {message.messageType === "sticker" ? (
+                                <img
+                                  src={message.mediaData.url}
+                                  alt="Sticker"
+                                  className="h-auto max-h-[150px] max-w-[150px]"
+                                />
+                              ) : message.mediaData.contentType?.startsWith(
+                                  "image/",
+                                ) || message.messageType === "image" ? (
+                                <img
+                                  src={message.mediaData.url}
+                                  alt="Media"
+                                  className="h-auto max-h-96 max-w-full rounded outline outline-1 [outline-color:var(--chat-media-outline)]"
+                                />
+                              ) : message.mediaData.contentType?.startsWith(
+                                  "video/",
+                                ) || message.messageType === "video" ? (
+                                <video
+                                  src={message.mediaData.url}
+                                  controls
+                                  className="h-auto max-h-96 max-w-full rounded outline outline-1 [outline-color:var(--chat-media-outline)]"
+                                />
+                              ) : message.mediaData.contentType?.startsWith(
+                                  "audio/",
+                                ) || message.messageType === "audio" ? (
+                                <audio
+                                  src={message.mediaData.url}
+                                  controls
+                                  className="w-full"
+                                />
+                              ) : (
+                                <a
+                                  href={message.mediaData.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={cn(
+                                    "flex min-w-0 items-center gap-2 text-sm underline hover:opacity-80",
+                                    message.direction === "outbound"
+                                      ? "text-primary"
+                                      : "text-primary",
+                                  )}
+                                >
+                                  <Paperclip className="h-4 w-4 flex-shrink-0" />
+                                  <span className="truncate">
+                                    {message.mediaData.filename ||
+                                      message.filename ||
+                                      "Download file"}
+                                  </span>
+                                </a>
+                              )}
+                            </div>
+                          ) : message.metadata?.mediaId && message.messageType ? (
+                            <div className="mb-2">
+                              <MediaMessage
+                                mediaId={message.metadata.mediaId}
+                                phoneNumberId={message.phoneNumberId || phoneNumberId}
+                                messageType={message.messageType}
+                                caption={message.caption}
+                                filename={message.filename}
+                                isOutbound={message.direction === "outbound"}
+                              />
+                            </div>
+                          ) : null}
+
+                            {message.caption && (
+                              <p className="text-sm break-words whitespace-pre-wrap mb-1">
+                                {message.caption}
+                              </p>
+                            )}
+
+                            {displayMessageContent && (
+                              <p className="text-sm break-words whitespace-pre-wrap">
+                                {displayMessageContent}
+                              </p>
+                            )}
+
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                              <span className="text-[11px] tabular-nums text-muted-foreground">
+                                {formatMessageTime(message.createdAt)}
+                              </span>
+
+                              {isOutbound && message.status && (
+                                <>
+                                  {message.status === "failed" ? (
+                                    <XCircle className="h-3.5 w-3.5 text-red-500" />
+                                  ) : (
+                                    <MessageStatusChecks status={message.status} />
+                                  )}
+                                </>
+                              )}
+                            </div>
+
+                            {isOutbound && message.status === "failed" && (
+                              <div className="mt-1">
+                                <span className="text-[11px] text-red-500 flex items-center gap-1">
+                                  Not delivered
+                                </span>
+                              </div>
+                            )}
+
+                            {isLocationRequest && (
+                              <div className="-mb-2">
+                                <LocationRequestFooter
+                                  answeredByMessageId={answeredLocationRequests.get(message.id)}
+                                  onShowAnswer={scrollToMessage}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </PopoverAnchor>
+
+                        <ReactionChips
+                          reactions={message.reactions ?? []}
+                          contactLabel={contactLabel}
+                          align={isOutbound ? "end" : "start"}
+                          onClick={canReact ? () => setReactionPickerMessageId(message.id) : undefined}
+                        />
                       </div>
 
-                      {message.direction === "outbound" &&
-                        message.status === "failed" && (
-                          <div className="mt-1">
-                            <span className="text-[11px] text-red-500 flex items-center gap-1">
-                              Not delivered
-                            </span>
-                          </div>
-                        )}
-
-                      {message.reactionEmoji && (
-                        <div className="absolute -bottom-2 -right-2 bg-background rounded-full px-1.5 py-0.5 text-sm shadow-sm border">
-                          {message.reactionEmoji}
+                      {!isOutbound && canSendRegularMessage && (
+                        // `relative` keeps the visually hidden react button inside the scroll area.
+                        <div className="relative mt-1 flex flex-shrink-0 items-center gap-0.5">
+                          {canReact && (
+                            <PopoverTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                // Touch screens open the picker with a long-press; the button stays for screen readers.
+                                className="text-muted-foreground hover:bg-[var(--chat-hover)] focus-visible:opacity-100 pointer-coarse:sr-only pointer-fine:size-7 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 data-[state=open]:opacity-100"
+                                aria-label={outboundReaction ? `Change reaction ${outboundReaction.emoji}` : "React to message"}
+                                title="React"
+                              >
+                                <Smile className="h-3.5 w-3.5" />
+                              </Button>
+                            </PopoverTrigger>
+                          )}
+                          <Button
+                            type="button"
+                            onClick={() => handleReplyToMessage(message)}
+                            variant="ghost"
+                            size="icon"
+                            className="size-9 text-muted-foreground opacity-100 hover:bg-[var(--chat-hover)] focus-visible:opacity-100 pointer-fine:size-7 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
+                            aria-label="Reply to message"
+                            title="Reply"
+                          >
+                            <Reply className="h-3.5 w-3.5" />
+                          </Button>
                         </div>
                       )}
                     </div>
-                    {message.direction === "inbound" && canSendRegularMessage && (
-                      <Button
-                        type="button"
-                        onClick={() => handleReplyToMessage(message)}
-                        variant="ghost"
-                        size="icon"
-                        className="mt-1 size-9 flex-shrink-0 text-muted-foreground opacity-100 hover:bg-[var(--chat-hover)] focus-visible:opacity-100 pointer-fine:size-7 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
-                        aria-label="Reply to message"
-                        title="Reply"
-                      >
-                        <Reply className="h-3.5 w-3.5" />
-                      </Button>
+
+                    {isPickerOpen && (
+                      <ReactionPickerContent
+                        currentEmoji={outboundReaction?.emoji}
+                        align="start"
+                        onSelect={(emoji) => void handleReact(message, emoji)}
+                      />
                     )}
-                  </div>
+                  </Popover>
                 </div>
               );
             })
@@ -1133,6 +1488,20 @@ export function MessageView({
           <div ref={messagesEndRef} />
         </div>
       </ScrollArea>
+
+        <div
+          role="status"
+          aria-live="polite"
+          className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center px-4"
+        >
+          {notice && (
+            <p className="flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
+              <AlertCircle aria-hidden="true" className="size-4 flex-shrink-0" />
+              {notice}
+            </p>
+          )}
+        </div>
+      </div>
 
       <div className="border-t border-[var(--chat-border-strong)] bg-[var(--chat-toolbar)] pb-safe-0">
         {canSendRegularMessage ? (
@@ -1223,17 +1592,79 @@ export function MessageView({
               >
                 <Paperclip className="h-5 w-5" />
               </Button>
+              {/* Small screens fold the extra message types into one menu to keep the input wide. */}
+              <Popover open={showComposerActions} onOpenChange={setShowComposerActions}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    disabled={sending}
+                    size="icon"
+                    variant="ghost"
+                    className="size-11 text-muted-foreground hover:bg-[var(--chat-hover)] data-[state=open]:bg-[var(--chat-hover)] data-[state=open]:text-primary md:hidden"
+                    aria-label="More message types"
+                    title="More message types"
+                  >
+                    <Plus className={cn("h-5 w-5 transition-transform duration-200", showComposerActions && "rotate-45")} />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent side="top" align="start" className="w-64 p-1">
+                  {[
+                    {
+                      icon: ListTree,
+                      label: "Interactive buttons",
+                      description: "Up to 3 quick-reply buttons",
+                      onSelect: () => setShowInteractiveDialog(true),
+                    },
+                    {
+                      icon: MapPin,
+                      label: "Request location",
+                      description: "Ask the contact to share where they are",
+                      onSelect: () => setShowLocationRequestDialog(true),
+                    },
+                  ].map((action) => (
+                    <button
+                      key={action.label}
+                      type="button"
+                      onClick={() => {
+                        setShowComposerActions(false);
+                        action.onSelect();
+                      }}
+                      className="flex min-h-14 w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--chat-hover)] focus-visible:bg-[var(--chat-hover)] focus-visible:outline-none"
+                    >
+                      <span className="flex size-9 flex-shrink-0 items-center justify-center rounded-full bg-primary/12 text-primary">
+                        <action.icon aria-hidden="true" className="size-4" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium text-foreground">{action.label}</span>
+                        <span className="block text-xs text-muted-foreground">{action.description}</span>
+                      </span>
+                    </button>
+                  ))}
+                </PopoverContent>
+              </Popover>
               <Button
                 type="button"
                 onClick={() => setShowInteractiveDialog(true)}
                 disabled={sending}
                 size="icon"
                 variant="ghost"
-                className="size-11 text-muted-foreground hover:bg-[var(--chat-hover)] hover:text-primary md:size-10"
+                className="hidden size-10 text-muted-foreground hover:bg-[var(--chat-hover)] hover:text-primary md:inline-flex"
                 aria-label="Send interactive message"
                 title="Send interactive message"
               >
                 <ListTree className="h-5 w-5" />
+              </Button>
+              <Button
+                type="button"
+                onClick={() => setShowLocationRequestDialog(true)}
+                disabled={sending}
+                size="icon"
+                variant="ghost"
+                className="hidden size-10 text-muted-foreground hover:bg-[var(--chat-hover)] hover:text-primary md:inline-flex"
+                aria-label="Request location"
+                title="Request location"
+              >
+                <MapPin className="h-5 w-5" />
               </Button>
               <Input
                 ref={messageInputRef}
@@ -1295,12 +1726,15 @@ export function MessageView({
         conversationId={conversationId}
         phoneNumber={phoneNumber}
         phoneNumberId={phoneNumberId}
-        onMessageSent={async () => {
-          await queryClient.invalidateQueries({
-            queryKey: CONVERSATIONS_QUERY_KEY,
-          });
-          await refreshCurrentThread();
-        }}
+        onMessageSent={handleSessionMessageSent}
+      />
+
+      <LocationRequestDialog
+        open={showLocationRequestDialog}
+        onOpenChange={setShowLocationRequestDialog}
+        phoneNumber={phoneNumber}
+        phoneNumberId={phoneNumberId}
+        onMessageSent={handleSessionMessageSent}
       />
     </div>
   );

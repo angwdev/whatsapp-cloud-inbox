@@ -21,6 +21,27 @@ export type Conversation = {
   };
 };
 
+export type MessageReaction = {
+  emoji: string;
+  direction: 'inbound' | 'outbound';
+  createdAt: string;
+  /** Sent from this browser and not yet confirmed by the message history. */
+  pending?: boolean;
+};
+
+export type MessageLocation = {
+  latitude: number;
+  longitude: number;
+  name?: string;
+  address?: string;
+  url?: string;
+};
+
+export const LOCATION_REQUEST_INTERACTIVE_TYPE = 'location_request_message';
+export const LOCATION_REQUEST_BODY_MAX_LENGTH = 1024;
+/** WhatsApp only delivers reactions to messages up to 30 days old. */
+export const REACTION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
 export type Message = {
   id: string;
   conversationId: string;
@@ -36,8 +57,13 @@ export type Message = {
     contentType?: string;
     filename?: string;
   } | (MediaData & { url: string });
+  /** Emoji carried by a reaction message itself. An empty string removes the reaction. */
   reactionEmoji?: string | null;
   reactedToMessageId?: string | null;
+  /** Current reactions on this message, at most one per side. */
+  reactions?: MessageReaction[];
+  location?: MessageLocation | null;
+  interactiveType?: string | null;
   contextMessageId?: string | null;
   repliedTo?: {
     id: string;
@@ -137,7 +163,7 @@ export async function fetchConversationMessages(conversationId: string, phoneNum
     conversationId,
   }));
 
-  return normalizeMessages(messages);
+  return normalizeMessages(messages, { keepOrphanReactions: true });
 }
 
 export function groupConversationsByPhoneNumber(conversations: Conversation[]): ConversationThread[] {
@@ -216,7 +242,17 @@ export function shortConversationId(conversationId?: string): string {
   return conversationId.replace(/-/g, '').slice(0, 8);
 }
 
+export function describeLocation(location: MessageLocation): string {
+  return location.name || location.address || `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`;
+}
+
+export function isLocationRequestMessage(message: Pick<Message, 'messageType' | 'interactiveType'>): boolean {
+  return message.messageType === 'interactive' && message.interactiveType === LOCATION_REQUEST_INTERACTIVE_TYPE;
+}
+
 function getReplyPreviewContent(message: Message): string {
+  if (message.location) return `📍 ${describeLocation(message.location)}`;
+
   const content = message.caption || message.content || message.filename || '';
   const trimmedContent = content.trim();
 
@@ -231,20 +267,75 @@ function getReplyPreviewContent(message: Message): string {
   return 'Message';
 }
 
-export function normalizeMessages(messages: Message[]): Message[] {
-  const reactions = messages.filter(message => message.messageType === 'reaction');
-  const regularMessages = messages.filter(message => message.messageType !== 'reaction');
-  const reactionMap = new Map<string, string>();
-  const messageMap = new Map(regularMessages.map(message => [message.id, message]));
+type ReactionEvent = MessageReaction & { targetId: string };
 
-  reactions.forEach((reaction) => {
-    if (reaction.reactedToMessageId && reaction.reactionEmoji) {
-      reactionMap.set(reaction.reactedToMessageId, reaction.reactionEmoji);
-    }
+/**
+ * Each side can hold one reaction per message: a newer reaction replaces the
+ * older one and a reaction with an empty emoji removes it.
+ */
+function collectReactions(events: ReactionEvent[]): Map<string, MessageReaction[]> {
+  const latestBySide = new Map<string, Map<MessageReaction['direction'], MessageReaction>>();
+
+  [...events]
+    .sort((a, b) => parseTimestamp(a.createdAt) - parseTimestamp(b.createdAt))
+    .forEach(({ targetId, ...reaction }) => {
+      const sides = latestBySide.get(targetId) ?? new Map();
+      const emoji = reaction.emoji.trim();
+
+      if (emoji) {
+        sides.set(reaction.direction, { ...reaction, emoji });
+      } else {
+        sides.delete(reaction.direction);
+      }
+
+      latestBySide.set(targetId, sides);
+    });
+
+  const reactionMap = new Map<string, MessageReaction[]>();
+  latestBySide.forEach((sides, targetId) => {
+    // Contact first, then you, so chips read the same way on every message.
+    reactionMap.set(
+      targetId,
+      [...sides.values()].sort((a, b) => (a.direction === b.direction ? 0 : a.direction === 'inbound' ? -1 : 1)),
+    );
   });
 
+  return reactionMap;
+}
+
+type NormalizeOptions = {
+  /**
+   * Keep reactions whose target is not in this batch, so a later pass over the
+   * whole thread can attach a reaction sent in a newer conversation.
+   */
+  keepOrphanReactions?: boolean;
+};
+
+export function normalizeMessages(messages: Message[], options: NormalizeOptions = {}): Message[] {
+  const reactions = messages.filter(message => message.messageType === 'reaction');
+  const regularMessages = messages.filter(message => message.messageType !== 'reaction');
+  const messageMap = new Map(regularMessages.map(message => [message.id, message]));
+  const reactionEvents: ReactionEvent[] = [
+    // Reactions attached by an earlier pass, so new events build on them.
+    ...regularMessages.flatMap(message => (message.reactions ?? []).map(reaction => ({ ...reaction, targetId: message.id }))),
+    ...reactions.flatMap((reaction) => (
+      reaction.reactedToMessageId && messageMap.has(reaction.reactedToMessageId)
+        ? [{
+            targetId: reaction.reactedToMessageId,
+            emoji: reaction.reactionEmoji ?? '',
+            direction: reaction.direction,
+            createdAt: reaction.createdAt,
+          }]
+        : []
+    )),
+  ];
+  const reactionMap = collectReactions(reactionEvents);
+  const orphanReactions = options.keepOrphanReactions
+    ? reactions.filter(reaction => !reaction.reactedToMessageId || !messageMap.has(reaction.reactedToMessageId))
+    : [];
+
   return regularMessages
-    .map((message) => {
+    .map((message): Message => {
       const reaction = reactionMap.get(message.id);
       const contextMessageId = message.contextMessageId?.trim();
       const repliedMessage = contextMessageId ? messageMap.get(contextMessageId) : undefined;
@@ -271,9 +362,10 @@ export function normalizeMessages(messages: Message[]): Message[] {
 
       return {
         ...message,
-        ...(reaction ? { reactionEmoji: reaction } : {}),
+        reactions: reaction ?? [],
         ...(repliedTo ? { repliedTo } : {}),
       };
     })
+    .concat(orphanReactions)
     .sort((a, b) => parseTimestamp(a.createdAt) - parseTimestamp(b.createdAt));
 }
