@@ -82,6 +82,7 @@ Every page and API route is protected by SSO through [Auth.js](https://authjs.de
 
 - `AUTH_SECRET` is required in production (`openssl rand -base64 32`).
 - `AUTH_URL` must be the public URL of the app when it runs behind a proxy or in a container; otherwise the OAuth callback points at the container's internal address.
+- `AUTH_AUTO_REDIRECT=true` skips the sign-in page and sends visitors straight to the identity provider when exactly one is configured; with several, set it to the provider ID (`oidc`, `google`, `microsoft-entra-id`, `github`). The page still appears after a failed sign-in or a sign-out, so there's no redirect loop and the identity provider's session doesn't sign you straight back in.
 - `AUTH_ALLOWED_DOMAINS` / `AUTH_ALLOWED_EMAILS` restrict who can sign in. Accounts the provider marks as unverified are always rejected.
 - With no provider configured, the app stays open under `npm run dev` but is locked in production. `AUTH_DISABLED=true` turns SSO off explicitly.
 - `/api/health` stays public for container health checks.

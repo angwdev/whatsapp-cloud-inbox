@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
-import { AlertCircle, KeyRound, MessageCircle } from 'lucide-react';
+import { redirect } from 'next/navigation';
+import { AlertCircle, CheckCircle2, KeyRound, MessageCircle } from 'lucide-react';
 import { signIn } from '@/auth';
-import { getSsoProviderSummaries } from '@/lib/auth-config';
+import { getAutoRedirectProviderId, getSsoProviderSummaries, safeCallbackUrl } from '@/lib/auth-config';
 import { Button } from '@/components/ui/button';
 
 export const metadata: Metadata = {
@@ -13,15 +14,6 @@ const ERROR_MESSAGES: Record<string, string> = {
   Configuration: 'Sign-in is misconfigured. Check the server logs.',
   Verification: 'The sign-in link is no longer valid.',
 };
-
-function safeCallbackUrl(value?: string | string[]): string {
-  const callbackUrl = Array.isArray(value) ? value[0] : value;
-  // Only same-origin relative paths; reject protocol-relative URLs like //evil.com.
-  if (!callbackUrl || !callbackUrl.startsWith('/') || callbackUrl.startsWith('//')) {
-    return '/';
-  }
-  return callbackUrl;
-}
 
 export default async function LoginPage({
   searchParams,
@@ -35,6 +27,13 @@ export default async function LoginPage({
   const errorMessage = errorCode
     ? ERROR_MESSAGES[errorCode] ?? 'Sign-in failed. Please try again.'
     : null;
+  const signedOut = params.signedOut !== undefined;
+
+  // Skip this page, except after a failed sign-in (to avoid a redirect loop) or a
+  // sign-out (the identity provider's session would sign the user straight back in).
+  if (getAutoRedirectProviderId() && !errorCode && !signedOut) {
+    redirect(`/login/sso?callbackUrl=${encodeURIComponent(redirectTo)}`);
+  }
 
   return (
     <main className="flex h-dvh min-h-dvh flex-col overflow-y-auto bg-background px-4 pb-safe-0 pt-safe-0 text-foreground">
@@ -48,6 +47,16 @@ export default async function LoginPage({
             Sign in with your organization account to continue.
           </p>
         </div>
+
+        {signedOut && !errorMessage && (
+          <div
+            role="status"
+            className="mb-4 flex items-start gap-2 rounded-lg border border-[var(--chat-border-strong)] bg-[var(--chat-surface)] px-3 py-3 text-sm"
+          >
+            <CheckCircle2 className="mt-0.5 size-4 flex-shrink-0 text-primary" />
+            <span>You&apos;re signed out.</span>
+          </div>
+        )}
 
         {errorMessage && (
           <div

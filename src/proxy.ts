@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { isAuthEnabled } from '@/lib/auth-config';
+import { getAutoRedirectProviderId, isAuthEnabled } from '@/lib/auth-config';
 
 const LOGIN_PATH = '/login';
 
@@ -8,7 +8,8 @@ export default auth((request) => {
   if (!isAuthEnabled()) return NextResponse.next();
 
   const { nextUrl } = request;
-  const isLoginPage = nextUrl.pathname === LOGIN_PATH;
+  // Includes /login/sso, which starts the auto-redirect sign-in.
+  const isLoginPage = nextUrl.pathname === LOGIN_PATH || nextUrl.pathname.startsWith(`${LOGIN_PATH}/`);
 
   if (request.auth) {
     return isLoginPage
@@ -22,7 +23,8 @@ export default auth((request) => {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
   }
 
-  const loginUrl = new URL(LOGIN_PATH, nextUrl);
+  // With auto-redirect, go straight to the identity provider instead of the sign-in page.
+  const loginUrl = new URL(getAutoRedirectProviderId() ? `${LOGIN_PATH}/sso` : LOGIN_PATH, nextUrl);
   loginUrl.searchParams.set('callbackUrl', `${nextUrl.pathname}${nextUrl.search}`);
   return NextResponse.redirect(loginUrl);
 });
